@@ -4,8 +4,31 @@ import { logger } from './loggingService';
 
 const PROFILE_PREFIX = 'devops_profile_';
 const USERS_KEY = 'devops_users';
+const CURRENT_SESSION_KEY = 'devops_active_session';
 
 export const storageService = {
+  // --- Session Management ---
+  saveSession: (user: User) => {
+      try {
+          localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(user));
+      } catch (e) {
+          logger.error('Failed to save session', e);
+      }
+  },
+
+  getSession: (): User | null => {
+      try {
+          const session = localStorage.getItem(CURRENT_SESSION_KEY);
+          return session ? JSON.parse(session) : null;
+      } catch (e) {
+          return null;
+      }
+  },
+
+  clearSession: () => {
+      localStorage.removeItem(CURRENT_SESSION_KEY);
+  },
+
   // --- User Management ---
   getUsers: (): User[] => {
     try {

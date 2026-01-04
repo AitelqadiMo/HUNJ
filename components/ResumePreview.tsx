@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { ResumeData, ResumeThemeConfig, PreviewSuggestion, JobAnalysis } from '../types';
 import { generatePreviewSuggestions } from '../services/geminiService';
-import { Phone, Mail, MapPin, Globe, Linkedin, Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Type, Grid, ExternalLink, Copy, LayoutTemplate, Briefcase, GraduationCap, User } from 'lucide-react';
+import { Phone, Mail, MapPin, Globe, Linkedin, Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Type, Grid, ExternalLink, Copy, LayoutTemplate, Briefcase, GraduationCap, User, EyeOff, FileText, Bookmark } from 'lucide-react';
 
 // Add declaration for html2pdf
 declare var html2pdf: any;
@@ -15,12 +16,31 @@ interface ResumePreviewProps {
 
 const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, onApplySuggestion, job }) => {
   const [showAppearance, setShowAppearance] = useState(false);
-  const [zoom, setZoom] = useState(0.65); // Slightly smaller default zoom to see full page
+  const [scale, setScale] = useState(1); 
   const [suggestions, setSuggestions] = useState<PreviewSuggestion[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [applyingSuggestionId, setApplyingSuggestionId] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [canvaCopied, setCanvaCopied] = useState(false);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Responsive Scaling Logic
+  useEffect(() => {
+      const handleResize = () => {
+          if (containerRef.current) {
+              const containerWidth = containerRef.current.offsetWidth;
+              const targetWidth = 794; // A4 width in pixels at 96 DPI (approx)
+              const padding = 32; // Extra padding
+              const newScale = Math.min((containerWidth - padding) / targetWidth, 1);
+              setScale(newScale);
+          }
+      };
+
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Load suggestions when resume or job changes
   useEffect(() => {
@@ -34,9 +54,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
   }, [resume.id]);
 
   const theme: ResumeThemeConfig = resume.themeConfig || {
-      template: 'Modern', 
+      template: 'Minimalist', 
       font: 'Inter',
-      accentColor: '#2563eb',
+      accentColor: '#334155', 
       fontSize: 'medium',
       spacing: 'normal'
   };
@@ -49,7 +69,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
 
   const handleDownloadPDF = async () => {
       setIsDownloading(true);
-      // Target the INNER content div which is not scaled by CSS transform
       const element = document.getElementById('resume-preview-content');
       
       if (!element) {
@@ -57,6 +76,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
           setIsDownloading(false);
           return;
       }
+
+      // Temporarily reset scale for PDF generation
+      const wrapper = document.getElementById('resume-preview-scale-wrapper');
+      const originalTransform = wrapper?.style.transform;
+      if (wrapper) wrapper.style.transform = 'scale(1)';
 
       const opt = {
         margin: 0,
@@ -72,23 +96,19 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
         console.error("PDF generation failed:", err);
         alert("Download failed. Please try printing to PDF using Ctrl+P.");
       } finally {
+        // Restore scale
+        if (wrapper) wrapper.style.transform = originalTransform || '';
         setIsDownloading(false);
       }
   };
 
   const handleCanvaExport = () => {
-      // Format text specifically for easy copy-pasting into Canva text boxes
       const textToCopy = `
-NAME:
-${resume.fullName}
-
-ROLE:
-${resume.role}
-
-CONTACT:
-${resume.email} | ${resume.phone} | ${resume.location}
-${resume.linkedin ? resume.linkedin : ''}
-${resume.website ? resume.website : ''}
+NAME: ${resume.fullName}
+ROLE: ${resume.role}
+CONTACT: ${resume.email} | ${resume.phone} | ${resume.location}
+LINKEDIN: ${resume.linkedin}
+WEBSITE: ${resume.website}
 
 SUMMARY:
 ${resume.summary}
@@ -106,8 +126,6 @@ ${resume.skills.join(' • ')}
       navigator.clipboard.writeText(textToCopy);
       setCanvaCopied(true);
       setTimeout(() => setCanvaCopied(false), 3000);
-      
-      // Open Canva Resume Templates in new tab
       window.open('https://www.canva.com/resumes/templates/', '_blank');
   };
 
@@ -119,14 +137,13 @@ ${resume.skills.join(' • ')}
       setSuggestions(prev => prev.filter(s => s.id !== suggestion.id));
   };
 
-  // Helper styles based on theme config
   const getFontStyle = () => {
       switch(theme.font) {
           case 'Merriweather': return 'font-serif';
           case 'Roboto': return 'font-sans';
           case 'JetBrains Mono': return 'font-mono';
-          case 'Lora': return 'font-[Lora,serif]';
-          default: return 'font-[Inter,sans-serif]';
+          case 'Lora': return 'font-lora';
+          default: return 'font-sans';
       }
   };
 
@@ -137,454 +154,440 @@ ${resume.skills.join(' • ')}
   };
 
   const getSpacingClass = () => {
-      if (theme.spacing === 'compact') return 'gap-2 space-y-2';
-      if (theme.spacing === 'comfortable') return 'gap-6 space-y-6';
-      return 'gap-4 space-y-4';
+      if (theme.spacing === 'compact') return 'space-y-1';
+      if (theme.spacing === 'comfortable') return 'space-y-3';
+      return 'space-y-2';
   };
 
-  // --- TEMPLATE RENDERERS ---
+  // --- TEMPLATES ---
 
-  // 1. MODERN (Style: Jack William - Left Sidebar, Clean Header)
+  // 1. MODERN (Sidebar)
   const ModernTemplate = () => (
-      <div className={`min-h-full bg-white text-slate-800 p-10 flex flex-col ${getFontStyle()}`}>
-          {/* Header */}
-          <header className="flex justify-between items-start mb-8 pb-6 border-b-2 border-transparent">
+      <div className={`min-h-full bg-white text-slate-800 p-8 flex flex-col ${getFontStyle()}`}>
+          <header className="flex justify-between items-start mb-8 pb-6 border-b-2 border-slate-100">
               <div className="flex-1">
-                  <h1 className="text-5xl font-extrabold uppercase tracking-tight leading-none text-slate-900 mb-2">{resume.fullName}</h1>
-                  <p className="text-lg text-slate-500 font-medium tracking-widest uppercase">{resume.role}</p>
+                  <h1 className="text-4xl font-bold uppercase tracking-tight leading-none text-slate-900 mb-2" style={{color: theme.accentColor}}>{resume.fullName}</h1>
+                  <p className="text-lg text-slate-500 font-medium tracking-wide">{resume.role}</p>
               </div>
-              <div className="text-right text-sm text-slate-600 space-y-1">
-                  <div className="flex items-center justify-end gap-2 font-medium">
-                      {resume.phone} <Phone className="w-3 h-3 text-slate-400" />
-                  </div>
-                  <div className="flex items-center justify-end gap-2 font-medium">
-                      {resume.email} <Mail className="w-3 h-3 text-slate-400" />
-                  </div>
-                  <div className="flex items-center justify-end gap-2 font-medium">
-                      {resume.location} <MapPin className="w-3 h-3 text-slate-400" />
-                  </div>
-                  {resume.linkedin && (
-                      <div className="flex items-center justify-end gap-2 font-medium">
-                          <span className="text-blue-600">linkedin.com/in/{resume.linkedin.split('/in/')[1] || 'profile'}</span> 
-                          <Linkedin className="w-3 h-3 text-slate-400" />
-                      </div>
-                  )}
+              <div className="text-right text-xs text-slate-600 space-y-1">
+                  <div className="font-medium">{resume.phone}</div>
+                  <div className="font-medium">{resume.email}</div>
+                  <div className="font-medium">{resume.location}</div>
+                  {resume.linkedin && <div className="text-blue-600 font-medium truncate max-w-[150px]">{resume.linkedin.replace('https://www.', '')}</div>}
               </div>
           </header>
           
           <div className="flex flex-1 gap-8">
-              {/* Left Column (Sidebar) */}
-              <div className="w-[32%] border-r border-slate-300 pr-6 space-y-6">
+              <div className="w-[30%] border-r border-slate-100 pr-6 space-y-8">
                   {resume.educationVisible !== false && (
                       <section>
-                          <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">EDUCATION</h3>
-                          <div className={`whitespace-pre-line text-slate-600 ${getSizeClass('')}`}>
-                              {resume.education}
-                          </div>
+                          <h3 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-xs" style={{color: theme.accentColor}}>EDUCATION</h3>
+                          <div className={`whitespace-pre-line text-slate-600 ${getSizeClass('')}`}>{resume.education}</div>
                       </section>
                   )}
-
                   <section>
-                      <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">SKILLS</h3>
-                      <ul className="space-y-2">
+                      <h3 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-xs" style={{color: theme.accentColor}}>SKILLS</h3>
+                      <div className="flex flex-wrap gap-2">
                           {resume.skills.map((s, i) => (
-                              <li key={i} className={`flex items-start gap-2 text-slate-700 font-medium ${getSizeClass('')}`}>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400 mt-1.5 shrink-0"></span> 
-                                  <span>{s}</span>
-                              </li>
+                              <span key={i} className="px-2 py-1 bg-slate-100 rounded text-xs font-medium text-slate-700">
+                                  {s}
+                              </span>
                           ))}
-                      </ul>
+                      </div>
                   </section>
-
-                  {resume.languages && resume.languages.length > 0 && (
-                      <section>
-                          <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">LANGUAGES</h3>
-                          <ul className="space-y-1">
-                              {resume.languages.map((l, i) => (
-                                  <li key={i} className={`text-slate-700 font-medium ${getSizeClass('')}`}>
-                                      {l}
-                                  </li>
-                              ))}
-                          </ul>
-                      </section>
-                  )}
-
-                  {resume.certifications && resume.certifications.length > 0 && (
-                      <section>
-                          <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">AWARDS & SCHOLARSHIPS</h3>
-                          <div className="space-y-4">
-                              {resume.certifications.filter(c => c.visible !== false).map(c => (
-                                  <div key={c.id} className="break-inside-avoid">
-                                      <div className="text-xs font-bold text-slate-400 mb-0.5 uppercase">{c.date}</div>
-                                      <div className="font-bold text-slate-800 text-sm leading-tight mb-1">{c.name}</div>
-                                      <div className="text-xs text-slate-500 italic">{c.issuer}</div>
-                                  </div>
-                              ))}
-                          </div>
-                      </section>
-                  )}
-
-                  {resume.affiliations && resume.affiliations.some(a => a.visible !== false) && (
-                      <section>
-                          <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">EXTRA-CURRICULAR ACTIVITIES</h3>
-                          <div className="space-y-4">
-                              {resume.affiliations.filter(a => a.visible !== false).map((aff, i) => (
-                                  <div key={i} className="break-inside-avoid">
-                                      <div className="font-bold text-slate-800 text-sm leading-tight">{aff.organization}</div>
-                                      <div className="text-xs text-slate-500 italic mb-1">{aff.role} • {aff.period}</div>
-                                  </div>
-                              ))}
-                          </div>
-                      </section>
-                  )}
               </div>
               
-              {/* Right Column (Main Content) */}
-              <div className="flex-1 space-y-6">
+              <div className="flex-1 space-y-8">
                   {resume.summaryVisible !== false && (
                       <section>
-                          <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">CAREER OBJECTIVE</h3>
-                          <p className={`leading-relaxed text-slate-700 text-justify ${getSizeClass('')}`}>
-                              {resume.summary}
-                          </p>
+                          <h3 className="font-bold text-slate-900 uppercase tracking-wider mb-3 text-xs" style={{color: theme.accentColor}}>PROFILE</h3>
+                          <p className={`leading-relaxed text-slate-700 text-justify ${getSizeClass('')}`}>{resume.summary}</p>
                       </section>
                   )}
-
                   <section>
-                      <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">WORK EXPERIENCE</h3>
+                      <h3 className="font-bold text-slate-900 uppercase tracking-wider mb-4 text-xs" style={{color: theme.accentColor}}>EXPERIENCE</h3>
                       <div className="space-y-6">
                           {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
                               <div key={i} className="break-inside-avoid">
                                   <div className="mb-2">
                                       <h4 className="font-bold text-slate-900 text-base">{exp.role}</h4>
-                                      <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wide text-slate-400 mt-1">
-                                          <span>{exp.period}</span>
+                                      <div className="flex justify-between items-center text-xs font-semibold text-slate-500 mt-0.5">
                                           <span style={{ color: theme.accentColor }}>{exp.company}</span>
+                                          <span>{exp.period}</span>
                                       </div>
                                   </div>
-                                  <ul className={`list-disc ml-4 text-slate-700 space-y-1.5 ${getSizeClass('')}`}>
+                                  <ul className={`list-disc ml-4 text-slate-700 ${getSpacingClass()} ${getSizeClass('')}`}>
                                       {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id} className="pl-1">{b.text}</li>)}
                                   </ul>
                               </div>
                           ))}
                       </div>
                   </section>
+              </div>
+          </div>
+      </div>
+  );
 
-                  {resume.projects && resume.projects.some(p => p.visible !== false) && (
-                    <section>
-                        <h3 className="font-bold text-slate-900 uppercase tracking-widest mb-4 text-sm">PROJECTS</h3>
-                        <div className="space-y-5">
-                            {resume.projects.filter(p => p.visible !== false).map((proj, i) => (
-                                <div key={i} className="break-inside-avoid">
-                                    <h4 className="font-bold text-slate-900 text-sm mb-1">{proj.name}</h4>
-                                    <p className={`text-slate-700 leading-relaxed ${getSizeClass('')}`}>{proj.description}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </section>
+  // 2. EXECUTIVE (Timeline / Heavy Header)
+  const ExecutiveTemplate = () => (
+      <div className={`min-h-full bg-white text-slate-800 p-12 ${getFontStyle()}`}>
+          <div className="mb-10 text-center border-b border-slate-300 pb-8">
+              <h1 className="text-4xl font-serif font-bold text-slate-900 mb-2 tracking-tight" style={{color: theme.accentColor}}>{resume.fullName}</h1>
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-slate-500 mb-4">{resume.role}</p>
+              <div className="flex justify-center gap-4 text-xs font-medium text-slate-600">
+                  <span>{resume.email}</span> • <span>{resume.phone}</span> • <span>{resume.location}</span>
+              </div>
+          </div>
+          
+          <div className="space-y-8">
+              {resume.summaryVisible !== false && (
+                  <section>
+                      <div className="flex items-center gap-4 mb-3">
+                          <div className="h-px bg-slate-200 flex-1"></div>
+                          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900">Summary</h3>
+                          <div className="h-px bg-slate-200 flex-1"></div>
+                      </div>
+                      <p className={`text-center max-w-2xl mx-auto leading-relaxed text-slate-600 ${getSizeClass('')}`}>{resume.summary}</p>
+                  </section>
+              )}
+
+              <section>
+                  <div className="flex items-center gap-4 mb-6">
+                      <div className="h-px bg-slate-200 flex-1"></div>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-slate-900">Experience</h3>
+                      <div className="h-px bg-slate-200 flex-1"></div>
+                  </div>
+                  <div className="space-y-8">
+                      {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
+                          <div key={i} className="break-inside-avoid relative pl-6 border-l-2 border-slate-100">
+                              <div className="flex justify-between items-baseline mb-2">
+                                  <h4 className="text-lg font-bold text-slate-900">{exp.company}</h4>
+                                  <span className="text-xs font-bold uppercase tracking-wide text-slate-400">{exp.period}</span>
+                              </div>
+                              <div className="text-sm font-bold text-slate-600 mb-3" style={{color: theme.accentColor}}>{exp.role}</div>
+                              <ul className={`list-disc ml-4 text-slate-600 ${getSpacingClass()} ${getSizeClass('')}`}>
+                                  {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id}>{b.text}</li>)}
+                              </ul>
+                          </div>
+                      ))}
+                  </div>
+              </section>
+          </div>
+      </div>
+  );
+
+  // 3. MINIMALIST (Clean, No Lines)
+  const MinimalistTemplate = () => (
+      <div className={`min-h-full bg-white text-slate-900 p-10 ${getFontStyle()}`}>
+          <div className="mb-10">
+              <h1 className="text-3xl font-medium tracking-tight mb-2">{resume.fullName}</h1>
+              <div className="text-sm text-slate-500 space-y-0.5">
+                  <p>{resume.role}</p>
+                  <p>{resume.location} • {resume.email} • {resume.phone}</p>
+              </div>
+          </div>
+
+          <div className="space-y-8">
+              {resume.summaryVisible !== false && (
+                  <section>
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">About</h3>
+                      <p className={`leading-relaxed text-slate-700 ${getSizeClass('')}`}>{resume.summary}</p>
+                  </section>
+              )}
+
+              <section>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-4">Work Experience</h3>
+                  <div className="space-y-8">
+                      {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
+                          <div key={i} className="break-inside-avoid">
+                              <div className="flex justify-between items-baseline mb-1">
+                                  <h4 className="font-semibold text-slate-900">{exp.role}</h4>
+                                  <span className="text-xs text-slate-400">{exp.period}</span>
+                              </div>
+                              <div className="text-sm text-slate-500 mb-2">{exp.company}</div>
+                              <ul className={`list-none text-slate-700 ${getSpacingClass()} ${getSizeClass('')}`}>
+                                  {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id} className="before:content-['•'] before:mr-2 before:text-slate-300">{b.text}</li>)}
+                              </ul>
+                          </div>
+                      ))}
+                  </div>
+              </section>
+
+              <div className="grid grid-cols-2 gap-8">
+                  <section>
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Skills</h3>
+                      <div className={`text-slate-700 ${getSizeClass('')}`}>
+                          {resume.skills.join(', ')}
+                      </div>
+                  </section>
+                  {resume.educationVisible !== false && (
+                      <section>
+                          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Education</h3>
+                          <div className={`text-slate-700 whitespace-pre-line ${getSizeClass('')}`}>{resume.education}</div>
+                      </section>
                   )}
               </div>
           </div>
       </div>
   );
 
-  // 2. EXECUTIVE (Style: AHMDD SAAH - Timeline Layout)
-  const ExecutiveTemplate = () => (
-      <div className={`min-h-full bg-white text-gray-800 p-12 ${getFontStyle()}`}>
-          {/* Header */}
-          <div className="mb-8 border-b-2 border-gray-800 pb-6">
-              <h1 className="text-4xl font-extrabold uppercase text-slate-800 mb-1 tracking-tight">{resume.fullName}</h1>
-              <p className="text-lg uppercase tracking-[0.2em] text-slate-500 font-medium">{resume.role}</p>
-          </div>
-
-          <div className="flex gap-10">
-              {/* Left Column: Contact & Skills */}
-              <div className="w-[30%] space-y-8 pt-2">
-                  <section>
-                      <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-4 border-b-2 border-slate-200 pb-2">Contact</h3>
-                      <div className="space-y-3 text-sm text-slate-600 font-medium">
-                          <div className="flex items-center gap-3">
-                              <Phone className="w-4 h-4 text-slate-800" /> {resume.phone}
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <Mail className="w-4 h-4 text-slate-800" /> <span className="break-all">{resume.email}</span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <MapPin className="w-4 h-4 text-slate-800" /> {resume.location}
-                          </div>
-                          <div className="flex items-center gap-3">
-                              <Globe className="w-4 h-4 text-slate-800" /> <span className="break-all">{resume.website?.replace('https://', '')}</span>
-                          </div>
+  // 4. CREATIVE (Grid, Bold)
+  const CreativeTemplate = () => (
+      <div className={`min-h-full bg-white text-slate-900 p-8 ${getFontStyle()}`}>
+          <div className="grid grid-cols-12 gap-8 h-full">
+              <div className="col-span-4 bg-slate-50 p-6 rounded-xl h-fit">
+                  <div className="mb-8">
+                      <div className="w-16 h-16 rounded-full bg-slate-900 text-white flex items-center justify-center text-2xl font-bold mb-4">
+                          {resume.fullName.charAt(0)}
                       </div>
-                  </section>
+                      <h1 className="text-2xl font-bold leading-tight mb-2">{resume.fullName}</h1>
+                      <p className="text-sm font-medium text-slate-500 mb-4">{resume.role}</p>
+                      <div className="text-xs text-slate-600 space-y-1.5">
+                          <div className="flex items-center gap-2"><Mail className="w-3 h-3"/> {resume.email}</div>
+                          <div className="flex items-center gap-2"><Phone className="w-3 h-3"/> {resume.phone}</div>
+                          <div className="flex items-center gap-2"><MapPin className="w-3 h-3"/> {resume.location}</div>
+                      </div>
+                  </div>
 
-                  <section>
-                      <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-4 border-b-2 border-slate-200 pb-2">Skills</h3>
-                      <ul className="space-y-2">
-                          {resume.skills.map((s, i) => (
-                              <li key={i} className="flex items-center gap-2 text-sm text-slate-700">
-                                  <span className="w-1.5 h-1.5 bg-slate-800 rounded-full"></span> {s}
-                              </li>
-                          ))}
-                      </ul>
-                  </section>
-
-                  {resume.languages && resume.languages.length > 0 && (
+                  <div className="space-y-6">
                       <section>
-                          <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-4 border-b-2 border-slate-200 pb-2">Languages</h3>
-                          <ul className="space-y-1 text-sm text-slate-700">
-                              {resume.languages.map((l, i) => (
-                                  <li key={i}>{l}</li>
-                              ))}
-                          </ul>
-                      </section>
-                  )}
-
-                  {resume.certifications && resume.certifications.some(c => c.visible !== false) && (
-                      <section>
-                          <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-4 border-b-2 border-slate-200 pb-2">Awards</h3>
-                          <div className="space-y-3">
-                              {resume.certifications.filter(c => c.visible !== false).map((c, i) => (
-                                  <div key={i} className="text-sm">
-                                      <div className="font-bold text-slate-700">{c.name}</div>
-                                      <div className="text-xs text-slate-500">{c.issuer} • {c.date}</div>
-                                  </div>
+                          <h3 className="font-bold text-sm mb-3 border-b border-slate-200 pb-1">SKILLS</h3>
+                          <div className="flex flex-wrap gap-2">
+                              {resume.skills.map((s, i) => (
+                                  <span key={i} className="text-xs bg-white border border-slate-200 px-2 py-1 rounded">
+                                      {s}
+                                  </span>
                               ))}
                           </div>
                       </section>
-                  )}
-              </div>
-
-              {/* Right Column: Timeline Content */}
-              <div className="flex-1 relative pt-2">
-                  {/* Timeline Line */}
-                  <div className="absolute left-[19px] top-4 bottom-0 w-[2px] bg-slate-200"></div>
-
-                  <div className="space-y-8">
-                      {/* Profile Section */}
-                      {resume.summaryVisible !== false && (
-                          <section className="relative pl-12">
-                              <div className="absolute left-0 top-0 w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center z-10">
-                                  <User className="w-5 h-5 text-white" />
-                              </div>
-                              <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-3 pt-2.5">Profile</h3>
-                              <p className={`leading-relaxed text-slate-600 text-justify ${getSizeClass('')}`}>
-                                  {resume.summary}
-                              </p>
-                          </section>
-                      )}
-
-                      {/* Experience Section */}
-                      <section className="relative pl-12">
-                          <div className="absolute left-0 top-0 w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center z-10">
-                              <Briefcase className="w-5 h-5 text-white" />
-                          </div>
-                          <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-6 pt-2.5">Work Experience</h3>
-                          
-                          <div className="space-y-8">
-                              {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
-                                  <div key={i} className="relative break-inside-avoid">
-                                      {/* Small timeline dot for each job */}
-                                      <div className="absolute -left-[34px] top-1.5 w-3 h-3 bg-white border-2 border-slate-800 rounded-full z-10"></div>
-                                      
-                                      <div className="flex justify-between items-baseline mb-1">
-                                          <h4 className="text-lg font-bold text-slate-900">{exp.company}</h4>
-                                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{exp.period}</span>
-                                      </div>
-                                      <div className="text-sm font-bold text-slate-600 uppercase tracking-wide mb-2">{exp.role}</div>
-                                      <ul className={`list-disc ml-4 space-y-1.5 text-slate-600 ${getSizeClass('')}`}>
-                                          {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id}>{b.text}</li>)}
-                                      </ul>
-                                  </div>
-                              ))}
-                          </div>
-                      </section>
-
-                      {/* Education Section */}
                       {resume.educationVisible !== false && (
-                          <section className="relative pl-12">
-                              <div className="absolute left-0 top-0 w-10 h-10 bg-slate-800 rounded-full flex items-center justify-center z-10">
-                                  <GraduationCap className="w-5 h-5 text-white" />
-                              </div>
-                              <h3 className="text-sm font-extrabold uppercase tracking-widest text-slate-800 mb-6 pt-2.5">Education</h3>
-                              
-                              <div className="relative break-inside-avoid">
-                                   <div className="absolute -left-[34px] top-1.5 w-3 h-3 bg-white border-2 border-slate-800 rounded-full z-10"></div>
-                                   <div className={`whitespace-pre-line text-slate-700 ${getSizeClass('')}`}>
-                                       {resume.education}
-                                   </div>
-                              </div>
+                          <section>
+                              <h3 className="font-bold text-sm mb-3 border-b border-slate-200 pb-1">EDUCATION</h3>
+                              <div className="text-xs text-slate-600 whitespace-pre-line">{resume.education}</div>
                           </section>
                       )}
                   </div>
               </div>
+
+              <div className="col-span-8 space-y-8 pt-2">
+                  {resume.summaryVisible !== false && (
+                      <section>
+                          <h2 className="text-xl font-bold mb-3 flex items-center gap-2">
+                              <User className="w-5 h-5 text-slate-400" /> Profile
+                          </h2>
+                          <p className={`text-slate-600 leading-relaxed ${getSizeClass('')}`}>{resume.summary}</p>
+                      </section>
+                  )}
+
+                  <section>
+                      <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                          <Briefcase className="w-5 h-5 text-slate-400" /> Experience
+                      </h2>
+                      <div className="space-y-8 border-l-2 border-slate-100 pl-6 ml-2">
+                          {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
+                              <div key={i} className="relative">
+                                  <div className="absolute -left-[31px] top-1.5 w-3 h-3 rounded-full bg-slate-200 border-2 border-white"></div>
+                                  <div className="mb-2">
+                                      <h4 className="font-bold text-lg">{exp.role}</h4>
+                                      <div className="text-sm font-medium text-slate-500">{exp.company} • {exp.period}</div>
+                                  </div>
+                                  <ul className={`list-disc ml-4 text-slate-600 ${getSpacingClass()} ${getSizeClass('')}`}>
+                                      {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id}>{b.text}</li>)}
+                                  </ul>
+                              </div>
+                          ))}
+                      </div>
+                  </section>
+              </div>
           </div>
       </div>
   );
 
-  // 3. MINIMALIST (Whitespace, Simple Typography) - Kept as is, useful alternative
-  const MinimalistTemplate = () => (
-      <div className={`min-h-full bg-white text-gray-800 p-12 flex flex-col ${getFontStyle()} ${getSpacingClass()}`}>
-          <div>
-              <h1 className="text-5xl font-light tracking-tight mb-2" style={{ color: theme.accentColor }}>{resume.fullName}</h1>
-              <p className="text-xl text-gray-400 font-light">{resume.role}</p>
-              <div className="mt-6 text-xs text-gray-400 font-mono flex gap-4">
+  // 5. ACADEMIC (Serif, Dense)
+  const AcademicTemplate = () => (
+      <div className={`min-h-full bg-white text-black p-12 font-serif`}>
+          <div className="text-center border-b-2 border-black pb-4 mb-6">
+              <h1 className="text-3xl font-bold uppercase tracking-widest mb-2">{resume.fullName}</h1>
+              <div className="text-sm space-x-3">
                   <span>{resume.email}</span>
+                  <span>|</span>
                   <span>{resume.phone}</span>
+                  <span>|</span>
                   <span>{resume.location}</span>
               </div>
           </div>
 
-          {resume.summaryVisible !== false && (
-              <div className="mt-8 border-t border-gray-100 pt-8 grid grid-cols-12 gap-8">
-                  <div className="col-span-3">
-                      <h3 className="text-xs text-gray-400 font-bold uppercase tracking-widest sticky top-0">About</h3>
+          <div className="space-y-6">
+              {resume.educationVisible !== false && (
+                  <section>
+                      <h3 className="font-bold uppercase text-sm border-b border-gray-300 mb-3">Education</h3>
+                      <div className="text-sm whitespace-pre-line">{resume.education}</div>
+                  </section>
+              )}
+
+              <section>
+                  <h3 className="font-bold uppercase text-sm border-b border-gray-300 mb-3">Professional Experience</h3>
+                  <div className="space-y-5">
+                      {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
+                          <div key={i}>
+                              <div className="flex justify-between font-bold text-sm mb-1">
+                                  <span>{exp.company}, {exp.role}</span>
+                                  <span>{exp.period}</span>
+                              </div>
+                              <ul className="list-disc ml-5 text-sm space-y-1">
+                                  {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id}>{b.text}</li>)}
+                              </ul>
+                          </div>
+                      ))}
                   </div>
-                  <div className="col-span-9">
-                      <p className={`leading-relaxed text-gray-600 ${getSizeClass('')}`}>{resume.summary}</p>
-                  </div>
+              </section>
+
+              <section>
+                  <h3 className="font-bold uppercase text-sm border-b border-gray-300 mb-3">Skills</h3>
+                  <p className="text-sm">{resume.skills.join(', ')}</p>
+              </section>
+          </div>
+      </div>
+  );
+
+  // 6. SWISS (Helvetica, Bold headers)
+  const SwissTemplate = () => (
+      <div className={`min-h-full bg-white text-slate-900 p-10 font-sans`}>
+          <header className="mb-12">
+              <h1 className="text-6xl font-black tracking-tighter mb-4 leading-none" style={{color: theme.accentColor}}>{resume.fullName}</h1>
+              <p className="text-xl font-bold text-slate-400">{resume.role}</p>
+              <div className="mt-4 text-sm font-bold flex gap-6 text-slate-900">
+                  <span>{resume.email}</span>
+                  <span>{resume.phone}</span>
+                  <span>{resume.location}</span>
               </div>
-          )}
+          </header>
 
           <div className="grid grid-cols-12 gap-8">
               <div className="col-span-3">
-                  <h3 className="text-xs text-gray-400 font-bold uppercase tracking-widest sticky top-0">Experience</h3>
+                  <h3 className="font-black text-sm uppercase mb-4 pt-1 border-t-4 border-slate-900">Info</h3>
               </div>
-              <div className="col-span-9 space-y-8">
+              <div className="col-span-9 mb-8">
+                  <p className="text-lg font-medium leading-relaxed">{resume.summary}</p>
+              </div>
+
+              <div className="col-span-3">
+                  <h3 className="font-black text-sm uppercase mb-4 pt-1 border-t-4 border-slate-900">Experience</h3>
+              </div>
+              <div className="col-span-9 space-y-10 mb-8">
                   {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
-                      <div key={i} className="break-inside-avoid">
-                          <div className="flex justify-between items-baseline mb-2">
-                              <h4 className="font-bold text-gray-900 text-md">{exp.company}</h4>
-                              <span className="text-xs text-gray-400 font-mono">{exp.period}</span>
+                      <div key={i}>
+                          <h4 className="text-2xl font-bold mb-1">{exp.company}</h4>
+                          <div className="flex justify-between text-sm font-bold text-slate-500 mb-4">
+                              <span>{exp.role}</span>
+                              <span>{exp.period}</span>
                           </div>
-                          <div className="text-xs text-gray-500 mb-3 italic">{exp.role}</div>
-                          <ul className={`space-y-2 text-gray-600 ${getSizeClass('')}`}>
-                               {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id} className="flex gap-2"><span className="text-gray-300">-</span> <span>{b.text}</span></li>)}
+                          <ul className="space-y-2 text-base font-medium text-slate-700">
+                              {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id}>{b.text}</li>)}
                           </ul>
                       </div>
                   ))}
               </div>
-          </div>
 
-          <div className="grid grid-cols-12 gap-8">
               <div className="col-span-3">
-                  <h3 className="text-xs text-gray-400 font-bold uppercase tracking-widest sticky top-0">Skills</h3>
+                  <h3 className="font-black text-sm uppercase mb-4 pt-1 border-t-4 border-slate-900">Skills</h3>
               </div>
               <div className="col-span-9">
-                  <div className={`flex flex-wrap gap-x-6 gap-y-2 text-gray-600 ${getSizeClass('')}`}>
-                      {resume.skills.map((s, i) => <span key={i}>{s}</span>)}
+                  <div className="text-lg font-bold text-slate-800 leading-loose">
+                      {resume.skills.map((s,i) => <span key={i} className="mr-4">{s}</span>)}
                   </div>
               </div>
           </div>
       </div>
   );
 
-  // 4. TECH (Dark Sidebar, Code-like aesthetic) - Kept as is
-  const TechTemplate = () => (
-      <div className={`min-h-full bg-white flex ${getFontStyle()}`}>
-          <div className="w-1/3 text-white p-8 flex flex-col gap-8 min-h-full" style={{ backgroundColor: '#1e293b' }}>
+  // 7. SERIF (Elegant)
+  const SerifTemplate = () => (
+      <div className={`min-h-full bg-[#fdfbf7] text-slate-800 p-12 font-serif`}>
+          <div className="flex justify-between items-end border-b border-slate-300 pb-6 mb-8">
               <div>
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-4 bg-white/10">
-                      {resume.fullName.charAt(0)}
-                  </div>
-                  <h1 className="text-2xl font-bold text-white leading-tight">{resume.fullName}</h1>
-                  <p className="text-slate-400 text-xs mt-2 uppercase tracking-widest">{resume.role}</p>
+                  <h1 className="text-4xl italic font-bold text-slate-900 mb-2">{resume.fullName}</h1>
+                  <p className="text-sm tracking-widest uppercase text-slate-500">{resume.role}</p>
               </div>
-
-              <div className="space-y-2 text-xs text-slate-300">
-                  <div className="flex items-center gap-2"><Mail className="w-3 h-3"/> {resume.email}</div>
-                  {resume.website && <div className="flex items-center gap-2"><Globe className="w-3 h-3"/> {resume.website.replace(/^https?:\/\//, '')}</div>}
-                  <div className="flex items-center gap-2"><MapPin className="w-3 h-3"/> {resume.location}</div>
-                  <div className="flex items-center gap-2"><Phone className="w-3 h-3"/> {resume.phone}</div>
+              <div className="text-right text-sm italic text-slate-600">
+                  <p>{resume.email}</p>
+                  <p>{resume.phone}</p>
               </div>
-
-              <div>
-                  <h3 className="text-white font-bold uppercase tracking-wider mb-4 text-xs border-b border-slate-700 pb-2">Tech Stack</h3>
-                  <div className="flex flex-wrap gap-2">
-                      {resume.skills.map((s, i) => (
-                          <span key={i} className="bg-slate-800 px-2 py-1 rounded text-[10px] text-blue-300 border border-slate-700">{s}</span>
-                      ))}
-                  </div>
-              </div>
-
-              {resume.educationVisible !== false && (
-                  <div>
-                      <h3 className="text-white font-bold uppercase tracking-wider mb-4 text-xs border-b border-slate-700 pb-2">Education</h3>
-                      <p className="text-xs whitespace-pre-line text-slate-300">{resume.education}</p>
-                  </div>
-              )}
           </div>
 
-          <div className={`w-2/3 p-10 text-slate-800 ${getSpacingClass()}`}>
-               {resume.summaryVisible !== false && (
-                   <section>
-                       <h3 className="font-bold text-lg mb-2 text-slate-900 border-b-2 border-slate-100 pb-1" style={{ color: theme.accentColor }}>// Summary</h3>
-                       <p className={`leading-relaxed ${getSizeClass('')}`}>{resume.summary}</p>
-                   </section>
-               )}
-
-               <section>
-                   <h3 className="font-bold text-lg mb-4 text-slate-900 border-b-2 border-slate-100 pb-1" style={{ color: theme.accentColor }}>// Experience</h3>
-                   <div className="space-y-6">
-                        {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
-                          <div key={i} className="break-inside-avoid">
-                              <div className="flex justify-between font-bold text-sm mb-1">
-                                  <span>{exp.role}</span>
-                                  <span className="text-slate-500 font-normal font-mono text-xs">{exp.period}</span>
+          <div className="grid grid-cols-3 gap-10">
+              <div className="col-span-2 space-y-8">
+                  <section>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Experience</h3>
+                      <div className="space-y-8">
+                          {resume.experience.filter(e => e.visible !== false).map((exp, i) => (
+                              <div key={i}>
+                                  <div className="flex justify-between items-baseline mb-2">
+                                      <h4 className="font-bold text-lg">{exp.company}</h4>
+                                      <span className="text-xs italic text-slate-500">{exp.period}</span>
+                                  </div>
+                                  <div className="text-sm italic text-slate-600 mb-3">{exp.role}</div>
+                                  <p className="text-sm leading-relaxed text-slate-700">
+                                      {exp.bullets.filter(b => b.visible !== false).map(b => b.text).join(' ')}
+                                  </p>
                               </div>
-                              <div className="text-xs font-bold mb-2 uppercase tracking-wide text-slate-600">@ {exp.company}</div>
-                              <ul className="list-none space-y-1">
-                                  {exp.bullets.filter(b => b.visible !== false).map((b) => <li key={b.id} className={`flex gap-2 ${getSizeClass('')}`}><span style={{ color: theme.accentColor }}>::</span> {b.text}</li>)}
-                              </ul>
-                          </div>
-                      ))}
-                   </div>
-               </section>
+                          ))}
+                      </div>
+                  </section>
+              </div>
+
+              <div className="space-y-8">
+                  <section>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Profile</h3>
+                      <p className="text-sm leading-relaxed text-slate-700 italic">{resume.summary}</p>
+                  </section>
+                  <section>
+                      <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Skills</h3>
+                      <ul className="text-sm space-y-2 text-slate-700">
+                          {resume.skills.map((s, i) => <li key={i}>{s}</li>)}
+                      </ul>
+                  </section>
+                  {resume.educationVisible !== false && (
+                      <section>
+                          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-400 mb-4">Education</h3>
+                          <div className="text-sm whitespace-pre-line text-slate-700">{resume.education}</div>
+                      </section>
+                  )}
+              </div>
           </div>
       </div>
   );
 
   return (
-    <div className="w-full h-full flex flex-col bg-gray-100/50">
-        {/* Toolbar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between shadow-sm z-30 print:hidden sticky top-0 h-14">
+    <div className="w-full h-full flex flex-col bg-slate-100">
+        <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between shadow-sm z-30 print:hidden sticky top-0 h-14">
             <div className="flex items-center gap-4 overflow-x-auto no-scrollbar h-full">
                 <button 
                     onClick={() => setShowAppearance(!showAppearance)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${showAppearance ? 'bg-devops-800 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${showAppearance ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-200'}`}
                 >
-                    <Palette className="w-4 h-4" /> Appearance
+                    <Palette className="w-4 h-4" /> <span className="hidden sm:inline">Design</span>
                 </button>
-                <div className="h-6 w-px bg-gray-300"></div>
-                
-                {/* Quick Toggles */}
-                <div className="flex items-center gap-2">
-                    <button onClick={() => updateTheme({ fontSize: 'small' })} className={`p-1.5 rounded ${theme.fontSize === 'small' ? 'bg-gray-200' : 'hover:bg-gray-100'}`} title="Small Text"><Type className="w-3 h-3" /></button>
-                    <button onClick={() => updateTheme({ fontSize: 'medium' })} className={`p-1.5 rounded ${theme.fontSize === 'medium' ? 'bg-gray-200' : 'hover:bg-gray-100'}`} title="Medium Text"><Type className="w-4 h-4" /></button>
-                    <button onClick={() => updateTheme({ fontSize: 'large' })} className={`p-1.5 rounded ${theme.fontSize === 'large' ? 'bg-gray-200' : 'hover:bg-gray-100'}`} title="Large Text"><Type className="w-5 h-5" /></button>
-                </div>
-                <div className="h-6 w-px bg-gray-300"></div>
-                
-                <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-                    <button onClick={() => setZoom(Math.max(0.4, zoom - 0.1))} className="p-1 hover:bg-white rounded"><ZoomOut className="w-4 h-4 text-gray-600"/></button>
-                    <span className="text-xs font-mono text-gray-500 w-12 text-center">{Math.round(zoom * 100)}%</span>
-                    <button onClick={() => setZoom(Math.min(1.5, zoom + 0.1))} className="p-1 hover:bg-white rounded"><ZoomIn className="w-4 h-4 text-gray-600"/></button>
+                <div className="h-6 w-px bg-slate-300 hidden sm:block"></div>
+                <div className="hidden sm:flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                    <button onClick={() => setScale(Math.max(0.4, scale - 0.1))} className="p-1 hover:bg-white rounded"><ZoomOut className="w-4 h-4 text-slate-600"/></button>
+                    <span className="text-xs font-mono text-slate-500 w-12 text-center">{Math.round(scale * 100)}%</span>
+                    <button onClick={() => setScale(Math.min(1.5, scale + 0.1))} className="p-1 hover:bg-white rounded"><ZoomIn className="w-4 h-4 text-slate-600"/></button>
                  </div>
             </div>
             
             <div className="flex gap-2">
                 <button 
                     onClick={handleCanvaExport}
-                    className="flex items-center gap-2 px-4 py-2 bg-[#00C4CC] hover:bg-[#00b0b8] text-white rounded-lg text-xs font-bold shadow-lg transition-all"
-                    title="Copy formatted data and open Canva"
+                    className="flex items-center gap-2 px-4 py-2 bg-[#00C4CC] hover:bg-[#00b0b8] text-white rounded-lg text-xs font-bold shadow-lg transition-all whitespace-nowrap"
                 >
                     {canvaCopied ? <Check className="w-4 h-4"/> : <LayoutTemplate className="w-4 h-4"/>}
-                    {canvaCopied ? 'Copied & Opening...' : 'Design in Canva'}
+                    {canvaCopied ? 'Opening...' : <span className="hidden sm:inline">Canva</span>}
                 </button>
                 <button 
                     onClick={handleDownloadPDF} 
                     disabled={isDownloading}
-                    className="flex items-center gap-2 px-4 py-2 bg-devops-900 hover:bg-devops-800 text-white rounded-lg text-xs font-bold shadow-lg transition-all"
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-lg transition-all"
                 >
                     {isDownloading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>}
                     PDF
@@ -592,113 +595,79 @@ ${resume.skills.join(' • ')}
             </div>
         </div>
 
-        {/* Extended Appearance Panel */}
         {showAppearance && (
-            <div className="bg-white border-b border-gray-200 p-6 print:hidden animate-in slide-in-from-top-2 z-20 shadow-xl relative grid grid-cols-1 md:grid-cols-3 gap-8">
-                <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Grid className="w-3 h-3"/> Templates</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                        {['Modern', 'Executive', 'Minimalist', 'Tech'].map((t) => (
+            <div className="bg-white border-b border-slate-200 p-6 print:hidden animate-in slide-in-from-top-2 z-20 shadow-xl relative grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="col-span-2">
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Grid className="w-3 h-3"/> Templates</h4>
+                    <div className="grid grid-cols-3 gap-3">
+                        {['Modern', 'Minimalist', 'Creative', 'Executive', 'Swiss', 'Academic', 'Serif'].map((t) => (
                             <button 
                                 key={t}
                                 onClick={() => updateTheme({ template: t as any })}
-                                className={`p-3 rounded-lg border-2 text-left transition-all ${
+                                className={`p-3 rounded-lg border text-left transition-all ${
                                     theme.template === t 
-                                    ? 'border-accent-500 bg-accent-50 text-accent-700' 
-                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                    ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-600' 
+                                    : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
                                 }`}
                             >
-                                <span className="block font-bold text-xs mb-1">{t}</span>
-                                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
-                                    <div className="h-full bg-current w-2/3 opacity-30"></div>
-                                </div>
+                                <span className="block font-bold text-sm mb-1">{t}</span>
+                                <span className="text-[10px] text-slate-500 opacity-80">
+                                    {t === 'Modern' ? 'Clean sidebar layout' : 
+                                     t === 'Minimalist' ? 'Pure typography' :
+                                     t === 'Swiss' ? 'Bold Helvetica grid' :
+                                     t === 'Academic' ? 'Traditional serif' : 'Professional'}
+                                </span>
                             </button>
                         ))}
                     </div>
                 </div>
-
                 <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Type className="w-3 h-3"/> Typography</h4>
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-2">
-                            {['Inter', 'Merriweather', 'Roboto', 'JetBrains Mono', 'Lora'].map(font => (
-                                <button
-                                    key={font}
-                                    onClick={() => updateTheme({ font: font as any })}
-                                    className={`px-3 py-2 rounded text-xs border transition-colors ${
-                                        theme.font === font ? 'border-accent-500 bg-accent-50 text-accent-700' : 'border-gray-200 hover:bg-gray-50 text-gray-700'
-                                    }`}
-                                    style={{ fontFamily: font }}
-                                >
-                                    {font}
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <div className="space-y-2">
-                            <label className="text-xs font-semibold text-gray-600">Layout Density</label>
-                            <div className="flex bg-gray-100 rounded-lg p-1">
-                                {['compact', 'normal', 'comfortable'].map((s) => (
-                                    <button
-                                        key={s}
-                                        onClick={() => updateTheme({ spacing: s as any })}
-                                        className={`flex-1 py-1.5 text-xs rounded capitalize transition-all ${theme.spacing === s ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'}`}
-                                    >
-                                        {s}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div>
-                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Palette className="w-3 h-3"/> Accent Color</h4>
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2"><Palette className="w-3 h-3"/> Brand Accent</h4>
                     <div className="flex flex-wrap gap-3">
-                        {['#2563eb', '#0f172a', '#059669', '#7c3aed', '#db2777', '#dc2626', '#d97706', '#4b5563'].map(color => (
+                        {[
+                            { color: '#0f172a', label: 'Slate' },
+                            { color: '#2563eb', label: 'Royal' }, 
+                            { color: '#059669', label: 'Emerald' },
+                            { color: '#7c3aed', label: 'Violet' }, 
+                            { color: '#db2777', label: 'Pink' },
+                            { color: '#ea580c', label: 'Orange' },
+                            { color: '#632024', label: 'Wine' }
+                        ].map(item => (
                             <button
-                                key={color}
-                                onClick={() => updateTheme({ accentColor: color })}
-                                className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${theme.accentColor === color ? 'border-gray-900 scale-110' : 'border-transparent'}`}
-                                style={{ backgroundColor: color }}
-                            />
+                                key={item.color}
+                                onClick={() => updateTheme({ accentColor: item.color })}
+                                className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 flex items-center justify-center ${theme.accentColor === item.color ? 'border-slate-900 scale-110' : 'border-transparent'}`}
+                                style={{ backgroundColor: item.color }}
+                                title={item.label}
+                            >
+                                {theme.accentColor === item.color && <Check className="w-4 h-4 text-white" />}
+                            </button>
                         ))}
                     </div>
-                    <div className="mt-4">
-                        <label className="text-xs font-semibold text-gray-600 block mb-1">Custom Hex</label>
-                        <div className="flex gap-2">
-                            <input 
-                                type="color" 
-                                value={theme.accentColor}
-                                onChange={(e) => updateTheme({ accentColor: e.target.value })}
-                                className="w-8 h-8 rounded cursor-pointer border-none p-0"
-                            />
-                            <input 
-                                type="text"
-                                value={theme.accentColor}
-                                onChange={(e) => updateTheme({ accentColor: e.target.value })}
-                                className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs uppercase font-mono"
-                            />
-                        </div>
+                    
+                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 mt-6 flex items-center gap-2"><Type className="w-3 h-3"/> Typography</h4>
+                    <div className="flex gap-2">
+                        {['Inter', 'Merriweather', 'Roboto', 'Lora'].map(font => (
+                            <button
+                                key={font}
+                                onClick={() => updateTheme({ font: font as any })}
+                                className={`px-3 py-1 text-xs border rounded ${theme.font === font ? 'bg-slate-900 text-white border-slate-900' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                            >
+                                {font}
+                            </button>
+                        ))}
                     </div>
                 </div>
             </div>
         )}
 
-        {/* Main Content Area */}
         <div className="flex-1 flex overflow-hidden">
-            {/* Preview Canvas */}
-            <div className="flex-1 overflow-auto bg-gray-200/80 p-8 print:p-0 print:bg-white print:overflow-visible flex justify-center relative">
-                
-                {/* 
-                    Structure for proper scaling and PDF generation:
-                    1. Outer wrapper handles CSS Scale (zoom) for screen.
-                    2. Inner 'resume-preview-content' has fixed A4 dimensions and is the PDF target.
-                */}
+            {/* Scrollable Container with centering */}
+            <div ref={containerRef} className="flex-1 overflow-auto bg-slate-100 p-4 md:p-8 print:p-0 print:bg-white print:overflow-visible flex justify-center relative">
                 <div 
                     id="resume-preview-scale-wrapper"
                     style={{ 
-                        transform: `scale(${zoom})`, 
+                        transform: `scale(${scale})`, 
                         transformOrigin: 'top center',
                         transition: 'transform 0.2s ease-out'
                     }}
@@ -710,55 +679,52 @@ ${resume.skills.join(' • ')}
                     >
                         {theme.template === 'Modern' && <ModernTemplate />}
                         {theme.template === 'Executive' && <ExecutiveTemplate />}
+                        {theme.template === 'Tech' && <ModernTemplate />} 
                         {theme.template === 'Minimalist' && <MinimalistTemplate />}
-                        {theme.template === 'Tech' && <TechTemplate />}
-                        {theme.template === 'Classic' && <ExecutiveTemplate />} {/* Fallback map to Executive for legacy classic */}
+                        {theme.template === 'Creative' && <CreativeTemplate />}
+                        {theme.template === 'Academic' && <AcademicTemplate />}
+                        {theme.template === 'Swiss' && <SwissTemplate />}
+                        {theme.template === 'Serif' && <SerifTemplate />}
+                        {/* Fallback for Tech/others reuse modern for now or specific ones if implemented later */}
+                        {theme.template === 'Classic' && <AcademicTemplate />}
                     </div>
                 </div>
             </div>
 
-            {/* Magic Suggestions Sidebar (Right Side) */}
+            {/* Suggestions Sidebar - Hidden on Mobile */}
             {onApplySuggestion && (
-                <div className="w-80 bg-white border-l border-gray-200 overflow-y-auto print:hidden flex flex-col">
-                    <div className="p-4 border-b border-gray-200 bg-gray-50 sticky top-0 z-10">
-                        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-purple-600" />
-                            Magic Suggestions
+                <div className="w-80 bg-white border-l border-slate-200 overflow-y-auto print:hidden flex flex-col hidden lg:flex shadow-sm z-10">
+                    <div className="p-4 border-b border-slate-200 bg-slate-50/80 backdrop-blur sticky top-0 z-10">
+                        <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-blue-600" />
+                            AI Suggestions
                         </h3>
-                        <p className="text-xs text-gray-500 mt-1">One-click improvements by AI</p>
                     </div>
-
                     <div className="p-4 space-y-4">
                         {isGeneratingSuggestions ? (
-                            <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
+                            <div className="flex flex-col items-center justify-center py-8 text-slate-400 gap-2">
                                 <Loader2 className="w-6 h-6 animate-spin" />
-                                <span className="text-xs">Analyzing resume layout...</span>
+                                <span className="text-xs">Analyzing layout...</span>
                             </div>
                         ) : suggestions.length === 0 ? (
-                            <div className="text-center py-8 text-gray-400 text-xs">
+                            <div className="text-center py-8 text-slate-400 text-xs">
                                 <Check className="w-8 h-8 mx-auto mb-2 text-green-500 opacity-50" />
-                                <p>No suggestions found. Your resume looks great!</p>
+                                <p>No suggestions found. Great job!</p>
                             </div>
                         ) : (
                             suggestions.map(suggestion => (
-                                <div key={suggestion.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-purple-300 hover:shadow-md transition-all group relative overflow-hidden">
+                                <div key={suggestion.id} className="bg-white border border-slate-200 rounded-lg p-3 hover:border-blue-400 hover:shadow-md transition-all group relative overflow-hidden">
                                     <div className="flex justify-between items-start mb-2">
-                                        <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-                                            suggestion.type === 'content' ? 'bg-blue-100 text-blue-600' :
-                                            suggestion.type === 'style' ? 'bg-pink-100 text-pink-600' :
-                                            'bg-yellow-100 text-yellow-600'
-                                        }`}>
-                                            {suggestion.type}
-                                        </span>
+                                        <span className="text-[10px] font-bold uppercase bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{suggestion.type}</span>
                                     </div>
-                                    <p className="text-sm text-gray-700 font-medium mb-3">{suggestion.label}</p>
+                                    <p className="text-sm text-slate-700 font-medium mb-3">{suggestion.label}</p>
                                     <button 
                                         onClick={() => handleMagicFix(suggestion)}
                                         disabled={applyingSuggestionId !== null}
-                                        className="w-full py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+                                        className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                                     >
                                         {applyingSuggestionId === suggestion.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Wand2 className="w-3 h-3"/>}
-                                        Apply Fix
+                                        Fix Automatically
                                     </button>
                                 </div>
                             ))

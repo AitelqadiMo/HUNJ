@@ -1,41 +1,103 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DevOps Resume Architect</title>
+    <title>HUNJ - Intelligent Career Acceleration</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&family=JetBrains+Mono:wght@400;500;600&family=Roboto:wght@300;400;500;700&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
     <script>
+      // Initialize PDF.js worker
+      window.onload = function() {
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+      };
+
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', 'sans-serif'],
-              mono: ['JetBrains Mono', 'monospace'],
-              serif: ['Merriweather', 'serif'],
+              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace'],
+              serif: ['"Playfair Display"', 'serif'],
+              lora: ['"Lora"', 'serif'],
             },
             colors: {
+              // --- APPLE-ESQUE ELEGANCE PALETTE ---
+              // Neutral Slates, Crisp Whites, Deep Blacks.
+              
+              // Map 'devops' to a clean Slate scale for the UI
               devops: {
-                900: '#0f172a',
-                800: '#1e293b',
-                700: '#334155',
-                600: '#475569',
-                500: '#64748b',
-                400: '#94a3b8',
-                300: '#cbd5e1',
-                200: '#e2e8f0',
-                100: '#f1f5f9',
-                50: '#f8fafc',
+                950: '#020617', // Very dark slate (almost black)
+                900: '#0f172a', // Sidebar / Dark Panels
+                800: '#1e293b', // Card BG (Dark Mode context)
+                700: '#334155', // Borders / Separators
+                600: '#475569', // Secondary Text
+                500: '#64748b', // Muted Text
+                400: '#94a3b8', // Icons / Hints
+                300: '#cbd5e1', 
+                200: '#e2e8f0', // Light Borders
+                100: '#f1f5f9', // Light Backgrounds
+                50: '#f8fafc',  // App Background (Off-white)
               },
+              
+              // Primary Brand Colors (Royal Blue / Indigo)
+              hunj: {
+                900: '#1e3a8a',
+                800: '#1e40af',
+                700: '#1d4ed8', 
+                600: '#2563eb', // Primary Action Blue (Apple-like)
+                500: '#3b82f6', // Hover State
+                400: '#60a5fa',
+                300: '#93c5fd', 
+                100: '#dbeafe',
+                50: '#eff6ff',
+              },
+              
+              // Accent Colors (Subtle Gold/Amber for specific highlights, or Secondary Blue)
               accent: {
-                500: '#3b82f6', // Blue for DevOps/Docker
-                600: '#2563eb',
+                600: '#0284c7', // Sky Blue
+                500: '#0ea5e9', 
+                400: '#38bdf8', 
+                100: '#e0f2fe',
               },
-              success: '#22c55e',
-              warning: '#eab308',
-              danger: '#ef4444',
+              
+              // Status Colors (Refined)
+              success: '#10b981', // Emerald
+              warning: '#f59e0b', // Amber
+              danger: '#ef4444',  // Red
+            },
+            animation: {
+              'blob': 'blob 10s infinite',
+              'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'float': 'float 6s ease-in-out infinite',
+              'pulse-glow': 'pulseGlow 3s infinite',
+              'spin-slow': 'spin 3s linear infinite',
+            },
+            keyframes: {
+              blob: {
+                '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                '100%': { transform: 'translate(0px, 0px) scale(1)' },
+              },
+              fadeInUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              pulseGlow: {
+                '0%, 100%': { boxShadow: '0 0 10px rgba(37, 99, 235, 0.1)' },
+                '50%': { boxShadow: '0 0 25px rgba(37, 99, 235, 0.2)' },
+              }
             }
           }
         }
@@ -43,26 +105,29 @@
     </script>
     <style>
       body {
-        background-color: #0f172a; /* devops-900 */
-        color: #f8fafc; /* devops-50 */
+        background-color: #f8fafc; /* Slate 50 */
+        color: #0f172a; /* Slate 900 */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
       }
-      /* Custom scrollbar */
+      
+      /* Refined Scrollbar */
       ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
+        width: 6px;
+        height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #1e293b; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
-        background: #475569; 
-        border-radius: 4px;
+        background: #cbd5e1; 
+        border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #64748b; 
+        background: #94a3b8; 
       }
 
-      /* Print Styles for PDF Generation */
+      /* Print Styles */
       @page {
         size: A4;
         margin: 0;
@@ -72,7 +137,10 @@
           visibility: hidden;
           background: white;
         }
-        #resume-preview-container {
+        #resume-preview-content, #resume-preview-content * {
+          visibility: visible;
+        }
+        #resume-preview-content {
           visibility: visible;
           position: absolute;
           left: 0;
@@ -84,16 +152,24 @@
           background: white !important;
           color: black !important;
           z-index: 9999;
-          transform: none !important; /* Disable zoom transform for print */
-          overflow: visible !important;
+          transform: none !important;
           box-shadow: none !important;
           border: none !important;
         }
-        #resume-preview-container * {
-          visibility: visible;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-        }
+      }
+      
+      .glass-panel {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.5);
+      }
+      
+      .gradient-text {
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-image: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
       }
     </style>
   <script type="importmap">

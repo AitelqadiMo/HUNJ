@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 import { CoverLetter, JobAnalysis, ResumeData } from '../types';
 import { generateCoverLetter } from '../services/geminiService';
-import { Loader2, Copy, Download, RefreshCw } from 'lucide-react';
+import { Loader2, Copy, Download, RefreshCw, PenTool } from 'lucide-react';
 
 interface CoverLetterProps {
   resume: ResumeData;
@@ -80,7 +81,5 @@ const CoverLetterEditor: React.FC<CoverLetterProps> = ({ resume, job, currentLet
     </div>
   );
 };
-
-import { PenTool } from 'lucide-react';
 
 export default CoverLetterEditor;

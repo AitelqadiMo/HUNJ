@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ResumeData } from '../types';
 import { updateResumeWithAI } from '../services/geminiService';
@@ -6,6 +7,7 @@ import { MessageCircle, X, Send, Sparkles, User, Bot, Loader2 } from 'lucide-rea
 interface AIChatAssistantProps {
   resume: ResumeData;
   onUpdate: (updatedResume: ResumeData) => void;
+  mode?: 'widget' | 'embedded'; // New prop to control display mode
 }
 
 interface Message {
@@ -14,7 +16,7 @@ interface Message {
   content: string;
 }
 
-const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ resume, onUpdate }) => {
+const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ resume, onUpdate, mode = 'widget' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     { id: '1', role: 'ai', content: "Hi! I'm your Resume Copilot. Tell me how you'd like to improve your resume (e.g., 'Make the summary more punchy', 'Add Python to skills', 'Fix typos')." }
@@ -62,37 +64,60 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ resume, onUpdate }) =
     }
   };
 
-  if (!isOpen) {
-    return (
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 p-4 bg-accent-600 hover:bg-accent-500 text-white rounded-full shadow-2xl hover:scale-105 transition-all animate-bounce-slow print:hidden"
-        title="Open AI Assistant"
-      >
-        <Sparkles className="w-6 h-6" />
-      </button>
-    );
+  // --- WIDGET MODE (Desktop Floating) ---
+  if (mode === 'widget') {
+      if (!isOpen) {
+        return (
+          <button
+            onClick={() => setIsOpen(true)}
+            className="fixed bottom-6 right-6 z-50 p-4 bg-accent-600 hover:bg-accent-500 text-white rounded-full shadow-2xl hover:scale-105 transition-all animate-bounce-slow print:hidden"
+            title="Open AI Assistant"
+          >
+            <Sparkles className="w-6 h-6" />
+          </button>
+        );
+      }
+
+      return (
+        <div className="fixed bottom-6 right-6 z-50 w-80 md:w-96 bg-devops-900 border border-devops-700 rounded-2xl shadow-2xl flex flex-col max-h-[600px] h-[500px] print:hidden">
+          <div className="p-4 border-b border-devops-700 bg-devops-800 rounded-t-2xl flex justify-between items-center">
+            <div className="flex items-center gap-2 text-white font-semibold">
+              <Sparkles className="w-5 h-5 text-accent-500" />
+              <h3>Resume Copilot</h3>
+            </div>
+            <button 
+              onClick={() => setIsOpen(false)}
+              className="text-devops-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <ChatContent messages={messages} isLoading={isLoading} messagesEndRef={messagesEndRef} />
+          <ChatInput input={input} setInput={setInput} isLoading={isLoading} handleSubmit={handleSubmit} />
+        </div>
+      );
   }
 
+  // --- EMBEDDED MODE (Mobile Full Screen) ---
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-80 md:w-96 bg-devops-900 border border-devops-700 rounded-2xl shadow-2xl flex flex-col max-h-[600px] h-[500px] print:hidden">
-      {/* Header */}
-      <div className="p-4 border-b border-devops-700 bg-devops-800 rounded-t-2xl flex justify-between items-center">
-        <div className="flex items-center gap-2 text-white font-semibold">
-          <Sparkles className="w-5 h-5 text-accent-500" />
-          <h3>Resume Copilot</h3>
-        </div>
-        <button 
-          onClick={() => setIsOpen(false)}
-          className="text-devops-400 hover:text-white transition-colors"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div className="flex flex-col h-full bg-devops-900">
+          <div className="p-4 border-b border-devops-700 bg-devops-800 flex justify-between items-center">
+            <div className="flex items-center gap-2 text-white font-semibold">
+              <Sparkles className="w-5 h-5 text-accent-500" />
+              <h3>AI Assistant</h3>
+            </div>
+          </div>
+          <ChatContent messages={messages} isLoading={isLoading} messagesEndRef={messagesEndRef} />
+          <ChatInput input={input} setInput={setInput} isLoading={isLoading} handleSubmit={handleSubmit} />
       </div>
+  );
+};
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((msg) => (
+// --- Subcomponents for cleaner render ---
+
+const ChatContent = ({ messages, isLoading, messagesEndRef }: any) => (
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((msg: Message) => (
           <div 
             key={msg.id} 
             className={`flex items-start gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
@@ -100,7 +125,7 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ resume, onUpdate }) =
             <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === 'ai' ? 'bg-accent-600' : 'bg-devops-700'}`}>
               {msg.role === 'ai' ? <Bot className="w-4 h-4 text-white" /> : <User className="w-4 h-4 text-white" />}
             </div>
-            <div className={`p-3 rounded-lg text-sm max-w-[80%] ${
+            <div className={`p-3 rounded-lg text-sm max-w-[85%] ${
               msg.role === 'user' 
                 ? 'bg-devops-700 text-white rounded-tr-none' 
                 : 'bg-devops-800 border border-devops-700 text-devops-100 rounded-tl-none'
@@ -115,30 +140,29 @@ const AIChatAssistant: React.FC<AIChatAssistantProps> = ({ resume, onUpdate }) =
           </div>
         )}
         <div ref={messagesEndRef} />
-      </div>
+    </div>
+);
 
-      {/* Input */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-devops-700 bg-devops-800 rounded-b-2xl">
+const ChatInput = ({ input, setInput, isLoading, handleSubmit }: any) => (
+    <form onSubmit={handleSubmit} className="p-4 border-t border-devops-700 bg-devops-800">
         <div className="flex gap-2">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type instructions..."
-            className="flex-1 bg-devops-900 border border-devops-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-500"
+            className="flex-1 bg-devops-900 border border-devops-600 rounded-lg px-3 py-3 text-sm text-white focus:outline-none focus:border-accent-500"
             disabled={isLoading}
           />
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="p-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="p-3 bg-accent-600 hover:bg-accent-500 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Send className="w-4 h-4" />
           </button>
         </div>
-      </form>
-    </div>
-  );
-};
+    </form>
+);
 
 export default AIChatAssistant;

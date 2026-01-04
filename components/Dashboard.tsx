@@ -1,26 +1,18 @@
+
 import React, { useState } from 'react';
 import { Application, ResumeData, JobAnalysis } from '../types';
-import { Plus, Briefcase, Calendar, ChevronRight, User, LayoutGrid, Kanban as KanbanIcon, Globe } from 'lucide-react';
-import JobRecommendations from './JobRecommendations';
+import { Plus, Briefcase, Calendar, ChevronRight, User, LayoutGrid, Kanban as KanbanIcon, Globe, Search } from 'lucide-react';
 import KanbanBoard from './KanbanBoard';
 
-interface DashboardProps {
+interface ExtendedDashboardProps {
   applications: Application[];
   masterResume: ResumeData;
   onNewApplication: () => void;
   onSelectApplication: (id: string) => void;
   onEditProfile: () => void;
-  // We need a way to add an app from recommendations, usually passed down from App.tsx
-  // Since we don't have that prop in the interface yet, I'll assume App.tsx will handle the logic 
-  // if we pass a callback up, or we can just pass onNewApplication but customized.
-  // Actually, let's add a specialized callback for instant analysis.
-}
-
-// Extended props to support the new features properly
-interface ExtendedDashboardProps extends DashboardProps {
-    onAnalyzeJob?: (analysis: JobAnalysis, text: string) => void;
-    onUpdateStatus?: (id: string, status: Application['status']) => void;
-    onNavigateToJobBoard?: () => void;
+  onAnalyzeJob?: (analysis: JobAnalysis, text: string) => void;
+  onUpdateStatus?: (id: string, status: Application['status']) => void;
+  onNavigateToJobBoard?: () => void;
 }
 
 const Dashboard: React.FC<ExtendedDashboardProps> = ({ 
@@ -28,157 +20,132 @@ const Dashboard: React.FC<ExtendedDashboardProps> = ({
   masterResume, 
   onNewApplication, 
   onSelectApplication,
-  onEditProfile,
-  onAnalyzeJob,
-  onUpdateStatus,
-  onNavigateToJobBoard
+  onUpdateStatus
 }) => {
   const [viewMode, setViewMode] = useState<'grid' | 'kanban'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const filteredApps = applications.filter(app => 
+    app.companyName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    app.jobTitle.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 h-full flex flex-col">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8 space-y-6 md:space-y-8 h-full flex flex-col pb-20 md:pb-0">
       
-      {/* Top Section: Profile & Actions */}
-      <div className="flex flex-col md:flex-row gap-6">
-          {/* Profile Summary Card */}
-          <div className="flex-1 bg-gradient-to-r from-devops-800 to-devops-900 border border-devops-700 rounded-2xl p-6 flex items-center justify-between shadow-xl">
-            <div className="flex items-center gap-6">
-                <div className="w-16 h-16 bg-accent-600 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-lg shadow-accent-500/30">
-                    {masterResume.fullName.charAt(0)}
-                </div>
-                <div>
-                    <h1 className="text-xl font-bold text-white mb-1">Welcome, {masterResume.fullName.split(' ')[0]}</h1>
-                    <p className="text-devops-300 text-sm flex items-center gap-2">
-                        <User className="w-3 h-3" /> Master Profile Active
-                    </p>
-                </div>
-            </div>
-            <button 
-                onClick={onEditProfile}
-                className="px-4 py-2 bg-devops-800 border border-devops-600 rounded-lg hover:bg-devops-700 transition-all text-devops-200 text-sm font-medium"
-            >
-                Edit Profile
-            </button>
-          </div>
-
-          {/* Quick Stats or Mini-Action */}
-          <div className="md:w-64 bg-devops-800 border border-devops-700 rounded-2xl p-6 flex flex-col justify-center items-center">
-              <span className="text-3xl font-bold text-white mb-1">{applications.length}</span>
-              <span className="text-xs text-devops-400 uppercase tracking-wide">Active Applications</span>
-          </div>
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Your Applications</h1>
+            <p className="text-slate-500 text-sm">Manage and track your active job pipeline.</p>
+        </div>
+        <button 
+            onClick={onNewApplication}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-600/30 transition-all font-bold hover:scale-105 active:scale-95"
+        >
+            <Plus className="w-4 h-4" /> New Application
+        </button>
       </div>
 
-      {/* Recommendations Widget (Only show if we have the callback) */}
-      {onAnalyzeJob && (
-          <JobRecommendations masterResume={masterResume} onApply={onAnalyzeJob} />
-      )}
-
-      {/* Pipeline Header */}
-      <div className="flex items-center justify-between mt-8">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-            <Briefcase className="w-5 h-5 text-accent-500" />
-            Application Pipeline
-        </h2>
-        <div className="flex items-center gap-4">
-            {onNavigateToJobBoard && (
-                <button 
-                    onClick={onNavigateToJobBoard}
-                    className="flex items-center gap-2 px-4 py-2 bg-devops-800 hover:bg-devops-700 text-devops-200 rounded-lg border border-devops-600 transition-all text-sm font-medium"
-                >
-                    <Globe className="w-4 h-4" /> Find Jobs
-                </button>
-            )}
-            <div className="flex bg-devops-800 rounded-lg p-1 border border-devops-700">
+      {/* Control Bar */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+          <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Search pipeline..." 
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+          </div>
+          
+          <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-lg">
                 <button 
                     onClick={() => setViewMode('grid')}
-                    className={`p-2 rounded transition-colors ${viewMode === 'grid' ? 'bg-devops-700 text-white' : 'text-devops-400 hover:text-white'}`}
-                    title="Grid View"
+                    className={`p-1.5 rounded-md transition-all flex items-center gap-2 text-xs font-medium ${viewMode === 'grid' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                    <LayoutGrid className="w-4 h-4" />
+                    <LayoutGrid className="w-4 h-4" /> Grid
                 </button>
                 <button 
                     onClick={() => setViewMode('kanban')}
-                    className={`p-2 rounded transition-colors ${viewMode === 'kanban' ? 'bg-devops-700 text-white' : 'text-devops-400 hover:text-white'}`}
-                    title="Kanban Board"
+                    className={`p-1.5 rounded-md transition-all flex items-center gap-2 text-xs font-medium ${viewMode === 'kanban' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
-                    <KanbanIcon className="w-4 h-4" />
+                    <KanbanIcon className="w-4 h-4" /> Kanban
                 </button>
-            </div>
-            <button 
-                onClick={onNewApplication}
-                className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg shadow-lg shadow-accent-600/20 transition-all text-sm font-bold"
-            >
-                <Plus className="w-4 h-4" /> New Application
-            </button>
-        </div>
+          </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-[400px]">
         {applications.length === 0 ? (
-            <div className="text-center py-20 bg-devops-800/50 rounded-2xl border border-dashed border-devops-700 h-full flex flex-col items-center justify-center">
-                <Briefcase className="w-16 h-16 text-devops-600 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-white mb-2">No applications yet</h3>
-                <p className="text-devops-400 mb-6">Start tracking your first job application to get AI-powered insights.</p>
+            <div className="text-center py-24 bg-white rounded-2xl border border-dashed border-slate-300 h-full flex flex-col items-center justify-center p-4">
+                <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
+                    <Briefcase className="w-8 h-8 text-blue-300" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">No applications yet</h3>
+                <p className="text-slate-500 mb-6 max-w-md text-sm md:text-base">Start tracking your first job application to get AI-powered insights tailored to your resume.</p>
                 <button 
                     onClick={onNewApplication}
-                    className="text-accent-400 hover:text-accent-300 font-medium"
+                    className="text-blue-600 hover:text-blue-700 font-bold flex items-center gap-2"
                 >
                     Create your first application &rarr;
                 </button>
             </div>
         ) : viewMode === 'kanban' ? (
              <KanbanBoard 
-                applications={applications} 
+                applications={filteredApps} 
                 onSelectApplication={onSelectApplication}
                 onUpdateStatus={onUpdateStatus || (() => {})}
              />
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {applications.map(app => (
+                {filteredApps.map(app => (
                     <div 
                         key={app.id}
                         onClick={() => onSelectApplication(app.id)}
-                        className="group bg-devops-800 border border-devops-700 hover:border-accent-500/50 rounded-xl p-6 cursor-pointer transition-all hover:shadow-xl hover:shadow-accent-500/5 hover:-translate-y-1 relative overflow-hidden"
+                        className="group bg-white border border-slate-200 hover:border-blue-500/50 rounded-2xl p-6 cursor-pointer transition-all hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 relative overflow-hidden active:scale-[0.98]"
                     >
                         <div className="flex justify-between items-start mb-4">
                             <div>
-                                <h3 className="font-bold text-lg text-white group-hover:text-accent-400 transition-colors line-clamp-1">{app.jobTitle}</h3>
-                                <p className="text-devops-400 text-sm">{app.companyName}</p>
+                                <h3 className="font-bold text-lg text-slate-900 group-hover:text-blue-600 transition-colors line-clamp-1">{app.jobTitle}</h3>
+                                <p className="text-slate-500 text-sm font-medium">{app.companyName}</p>
                             </div>
-                            <span className={`px-2 py-1 rounded-md text-xs font-medium border ${
-                                app.status === 'Applied' ? 'bg-blue-500/10 border-blue-500/30 text-blue-400' :
-                                app.status === 'Offer' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
-                                app.status === 'Rejected' ? 'bg-red-500/10 border-red-500/30 text-red-400' :
-                                'bg-devops-700/50 border-devops-600 text-devops-300'
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${
+                                app.status === 'Applied' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                                app.status === 'Offer' ? 'bg-green-50 border-green-200 text-green-700' :
+                                app.status === 'Rejected' ? 'bg-red-50 border-red-200 text-red-700' :
+                                'bg-slate-100 border-slate-200 text-slate-600'
                             }`}>
                                 {app.status}
                             </span>
                         </div>
                         
-                        <div className="space-y-3 mb-6">
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-devops-500">ATS Score</span>
+                        <div className="space-y-4 mb-6">
+                            <div className="flex items-center justify-between text-sm p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                <span className="text-slate-500 font-medium">ATS Score</span>
                                 <span className={`font-mono font-bold ${
-                                    (app.atsScore?.total || 0) > 80 ? 'text-success' : 'text-warning'
+                                    (app.atsScore?.total || 0) > 80 ? 'text-green-600' : 'text-orange-500'
                                 }`}>
                                     {app.atsScore?.total || 'N/A'}
                                 </span>
                             </div>
-                            <div className="flex items-center justify-between text-sm">
-                                <span className="text-devops-500">Probability</span>
-                                <span className="font-mono text-devops-200">
+                            <div className="flex items-center justify-between text-sm px-1">
+                                <span className="text-slate-400 font-medium">Probability</span>
+                                <span className="font-mono text-slate-600 font-bold">
                                     {app.jobAnalysis?.hiringProbability ? `${app.jobAnalysis.hiringProbability}%` : 'N/A'}
                                 </span>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-4 border-t border-devops-700/50 text-xs text-devops-500">
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-100 text-xs text-slate-400 font-medium">
                             <span className="flex items-center gap-1">
                                 <Calendar className="w-3 h-3" />
                                 {new Date(app.dateCreated).toLocaleDateString()}
                             </span>
-                            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <ChevronRight className="w-3 h-3" />
+                            </div>
                         </div>
                     </div>
                 ))}

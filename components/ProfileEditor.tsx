@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import { ResumeData } from '../types';
 import ResumeEditor from './ResumeEditor';
 import { parseResumeFromText } from '../services/geminiService';
-import { Save, Upload, ArrowLeft, Loader2, FileText } from 'lucide-react';
+import { extractTextFromPDF } from '../services/pdfService';
+import { Save, Upload, ArrowLeft, Loader2, FileText, File } from 'lucide-react';
 
 interface ProfileEditorProps {
   resume: ResumeData;
@@ -15,6 +17,33 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ resume, onUpdate, onBack 
   const [importText, setImportText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (file.type === 'application/pdf') {
+          setFileName(file.name);
+          setIsImporting(true);
+          try {
+              const text = await extractTextFromPDF(file);
+              setImportText(text);
+          } catch (err) {
+              setError("Failed to read PDF. Please paste text manually.");
+              setFileName(null);
+          } finally {
+              setIsImporting(false);
+          }
+      } else {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              setImportText(ev.target?.result as string);
+              setFileName(file.name);
+          };
+          reader.readAsText(file);
+      }
+  };
 
   const handleImport = async () => {
     if (!importText.trim()) return;
@@ -26,6 +55,7 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ resume, onUpdate, onBack 
       onUpdate({ ...parsedResume, id: resume.id });
       setShowImport(false);
       setImportText('');
+      setFileName(null);
     } catch (e) {
       setError("Failed to parse resume text. Please ensure it's readable.");
     } finally {
@@ -40,18 +70,18 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ resume, onUpdate, onBack 
         <div className="flex items-center gap-4">
           <button 
             onClick={onBack}
-            className="p-2 hover:bg-devops-800 rounded-lg text-devops-400 hover:text-white transition-colors"
+            className="p-2 hover:bg-white rounded-lg text-slate-500 hover:text-slate-900 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">Master Profile</h1>
-            <p className="text-devops-400 text-sm">This is the source of truth for all your applications.</p>
+            <h1 className="text-2xl font-bold text-slate-900">Master Profile</h1>
+            <p className="text-slate-500 text-sm">This is the source of truth for all your applications.</p>
           </div>
         </div>
         <button 
           onClick={() => setShowImport(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-devops-800 border border-devops-600 rounded-lg hover:bg-devops-700 text-white transition-all"
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg hover:border-hunj-500 hover:text-hunj-600 transition-all shadow-sm text-slate-700"
         >
           <Upload className="w-4 h-4" /> Import Resume
         </button>
@@ -68,49 +98,82 @@ const ProfileEditor: React.FC<ProfileEditorProps> = ({ resume, onUpdate, onBack 
 
       {/* Import Modal */}
       {showImport && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-devops-800 rounded-xl border border-devops-700 shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-devops-700 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                <FileText className="w-5 h-5 text-accent-500" />
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-200 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="w-5 h-5 text-accent-600" />
                 Import Resume
               </h3>
               <button 
                 onClick={() => setShowImport(false)}
-                className="text-devops-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-900"
               >
                 ✕
               </button>
             </div>
             
-            <div className="p-6 overflow-y-auto">
-              <p className="text-devops-300 mb-4 text-sm">
-                Paste the text content of your current resume below. Our AI will analyze and structure it into your Master Profile.
+            <div className="p-6 overflow-y-auto space-y-4">
+              <p className="text-slate-600 text-sm">
+                Upload your PDF resume or paste the content below. Our AI will structure it into your Master Profile.
               </p>
+
+              {!fileName ? (
+                  <div className="border-2 border-dashed border-slate-300 rounded-xl p-6 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition-colors relative group cursor-pointer">
+                      <input 
+                          type="file" 
+                          accept=".pdf,.txt"
+                          onChange={handleFileUpload}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      />
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm border border-slate-200">
+                          {isImporting ? <Loader2 className="w-6 h-6 animate-spin text-hunj-600" /> : <Upload className="w-6 h-6 text-hunj-600" />}
+                      </div>
+                      <p className="font-bold text-slate-700 text-sm">Upload PDF</p>
+                  </div>
+              ) : (
+                  <div className="bg-hunj-50 border border-hunj-100 rounded-lg p-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                          <File className="w-4 h-4 text-hunj-600" />
+                          <span className="text-sm font-medium text-slate-900">{fileName}</span>
+                      </div>
+                      <button onClick={() => { setFileName(null); setImportText(''); }} className="text-xs text-slate-400 hover:text-red-500">Remove</button>
+                  </div>
+              )}
+
+              <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-slate-200"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-white text-slate-400">or paste text</span>
+                  </div>
+              </div>
+
               <textarea 
-                className="w-full h-64 bg-devops-900 border border-devops-600 rounded-lg p-4 text-devops-100 placeholder-devops-500 focus:outline-none focus:ring-2 focus:ring-accent-500 font-mono text-sm resize-none"
+                className="w-full h-48 bg-slate-50 border border-slate-200 rounded-lg p-4 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-accent-500 font-mono text-sm resize-none"
                 placeholder="Paste resume content here..."
                 value={importText}
                 onChange={(e) => setImportText(e.target.value)}
               />
               {error && (
-                <p className="mt-3 text-danger text-sm bg-danger/10 p-2 rounded border border-danger/20">
+                <p className="mt-2 text-danger text-sm bg-danger/10 p-2 rounded border border-danger/20">
                   {error}
                 </p>
               )}
             </div>
 
-            <div className="p-6 border-t border-devops-700 flex justify-end gap-3">
+            <div className="p-6 border-t border-slate-200 flex justify-end gap-3">
               <button 
                 onClick={() => setShowImport(false)}
-                className="px-4 py-2 text-devops-300 hover:text-white"
+                className="px-4 py-2 text-slate-500 hover:text-slate-900"
               >
                 Cancel
               </button>
               <button 
                 onClick={handleImport}
                 disabled={isImporting || !importText.trim()}
-                className="flex items-center gap-2 px-6 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 px-6 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-md shadow-accent-600/20"
               >
                 {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                 {isImporting ? 'Parsing...' : 'Import & Parse'}
