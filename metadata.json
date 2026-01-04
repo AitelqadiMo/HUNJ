@@ -1,0 +1,5 @@
+{
+  "name": "DevOps Resume Architect",
+  "description": "An intelligent resume and cover letter generation platform for DevOps professionals. Features real-time AI editing, multi-style generation, and ATS scoring powered by Gemini.",
+  "requestFramePermissions": []
+}
