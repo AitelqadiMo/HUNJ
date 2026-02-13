@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UserProfile, ResumeData } from '../types';
 import { storageService } from '../services/storageService';
@@ -9,6 +8,10 @@ declare global {
     interface Window {
         google: any;
     }
+}
+
+interface AuthScreenProps {
+  onLogin: (user: User, isNewUser: boolean) => void;
 }
 
 // Default Data for seeding
@@ -57,10 +60,6 @@ const INITIAL_PROFILE: UserProfile = {
     onboardingSeen: false,
     profileComplete: false
 };
-
-interface AuthScreenProps {
-  onLogin: (user: User, isNewUser: boolean) => void;
-}
 
 const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [email, setEmail] = useState('');

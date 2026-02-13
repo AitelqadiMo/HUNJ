@@ -1,531 +1,546 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ResumeData, DesignBlueprint, ResumeThemeConfig } from '../types';
-import { generateDesignBlueprint } from '../services/geminiService';
-import { Download, Loader2, Palette, Sparkles, ZoomIn, ZoomOut, Check, Eye, EyeOff, Layout, Type, Palette as PaletteIcon, ChevronRight, GripVertical } from 'lucide-react';
+import { ResumeData, ResumeThemeConfig, PreviewSuggestion, JobAnalysis, TemplateRecommendation, ResumeLayout } from '../types';
+import { generatePreviewSuggestions, recommendTemplate } from '../services/geminiService';
+import { Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Phone, Mail, MapPin, Globe, Linkedin, LayoutTemplate, Type, Eye, MoveUp, MoveDown, Grid2X2, AlignLeft, BookOpen, Layers, Settings, EyeOff, FileText, GripVertical } from 'lucide-react';
 
 declare var html2pdf: any;
 
-// --- ENGINE: SUB-COMPONENTS ---
+interface ResumePreviewProps {
+  resume: ResumeData;
+  onThemeUpdate?: (theme: ResumeThemeConfig) => void;
+  onUpdate?: (resume: ResumeData) => void;
+  onApplySuggestion?: (instruction: string) => Promise<void>;
+  job?: JobAnalysis | null;
+}
 
-// Explicitly type children to satisfy compiler expectations at call sites
-const SectionHeader: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <h3 className="section-title">
-        {children}
-    </h3>
-);
+// --- UTILITY: CONTENT OPTIMIZER HOOK ---
+const useContentOptimizer = (resume: ResumeData, theme: ResumeThemeConfig) => {
+    return useMemo(() => {
+        if (theme.targetPageCount >= 3) return resume;
 
-const ResumeHeader = ({ resume }: { resume: ResumeData }) => (
-    <header className="resume-header">
-        <h1 className="name">{resume.fullName}</h1>
-        <div className="role-tag">{resume.role}</div>
-        <div className="contact-strip">
-            {resume.email && <span className="item">{resume.email}</span>}
-            {resume.phone && <span className="item">{resume.phone}</span>}
-            {resume.location && <span className="item">{resume.location}</span>}
-            {resume.linkedin && <span className="item">{resume.linkedin.replace(/^https?:\/\//, '')}</span>}
-        </div>
-    </header>
-);
+        const optimized = { ...resume };
+        const isOnePage = theme.targetPageCount === 1;
 
-const Experience = ({ items }: { items: ResumeData['experience'] }) => (
-    <div className="experience-list">
-        {items.filter(i => i.visible !== false).map((exp, idx) => (
-            <div key={exp.id || idx} className="experience-item">
-                <div className="row-main">
-                    <span className="role">{exp.role}</span>
-                    <span className="period">{exp.period}</span>
-                </div>
-                <div className="row-sub">
-                    <span className="company">{exp.company}</span>
-                    {exp.location && <span className="loc">{exp.location}</span>}
-                </div>
-                <ul className="bullets">
-                    {exp.bullets.filter(b => b.visible !== false).map((b, i) => (
-                        <li key={b.id || i}>{b.text}</li>
-                    ))}
-                </ul>
-            </div>
-        ))}
-    </div>
-);
+        if (isOnePage && optimized.experience.length > 4) {
+            optimized.experience = optimized.experience.slice(0, 4);
+        }
 
-const Skills = ({ skills, categories }: { skills: string[], categories?: ResumeData['skillCategories'] }) => (
-    <div className="skills-grid">
-        {categories && categories.length > 0 ? (
-            categories.map((cat, idx) => (
-                <div key={idx} className="skill-cat">
-                    <span className="cat-name">{cat.name}:</span>
-                    <span className="cat-vals">{cat.skills.join(', ')}</span>
-                </div>
-            ))
-        ) : (
-            <div className="skills-tags">
-                {skills.map((s, i) => <span key={i} className="skill-tag">{s}</span>)}
-            </div>
-        )}
-    </div>
-);
+        optimized.experience = optimized.experience.map((exp, i) => {
+            const maxBullets = isOnePage ? (i === 0 ? 5 : i === 1 ? 4 : 2) : 6;
+            return {
+                ...exp,
+                bullets: exp.bullets.filter(b => b.visible !== false).slice(0, maxBullets)
+            };
+        });
 
-// --- ENGINE: CORE ---
+        if (isOnePage && optimized.projects.length > 3) {
+            optimized.projects = optimized.projects.slice(0, 2);
+        }
 
-const ResumePreview: React.FC<{ resume: ResumeData; job?: any; onUpdate?: (resume: ResumeData) => void; onThemeUpdate?: (theme: ResumeThemeConfig) => void; }> = ({ resume, job, onUpdate }) => {
-  const [blueprint, setBlueprint] = useState<DesignBlueprint | null>(resume.designBlueprint || null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [scale, setScale] = useState(1);
-  const [isExporting, setIsExporting] = useState(false);
-  const [activeStudioTab, setActiveStudioTab] = useState<'layout' | 'style' | 'visibility'>('layout');
-  const [showStudio, setShowStudio] = useState(false);
+        if (isOnePage && optimized.certifications.length > 4) {
+            optimized.certifications = optimized.certifications.slice(0, 4);
+        }
 
-  const surfaceRef = useRef<HTMLDivElement>(null);
+        return optimized;
+    }, [resume, theme.targetPageCount]);
+};
 
-  // Sync state if resume prop updates externally (e.g. from editor)
-  useEffect(() => {
-      if (resume.designBlueprint && resume.designBlueprint !== blueprint) {
-          setBlueprint(resume.designBlueprint);
-      }
-  }, [resume.designBlueprint]);
+// --- RENDERERS ---
 
-  // Initial generation if blueprint is missing
-  useEffect(() => {
-    if (!resume.designBlueprint) {
-        initBlueprint();
-    }
-  }, [resume.id]); // Only re-gen if ID changes to prevent loops
+const ImpactHighlighter = ({ text }: { text: string }) => {
+    const parts = text.split(/(\d+(?:[,.]\d+)?(?:%|k|M|B|\+|x)|(?:\$|€|£)\d+(?:[,.]\d+)?(?:k|M|B)?)/g);
+    return (
+        <span>
+            {parts.map((part, i) => {
+                if (part.match(/(\d+(?:[,.]\d+)?(?:%|k|M|B|\+|x)|(?:\$|€|£)\d+(?:[,.]\d+)?(?:k|M|B)?)/)) {
+                    return <strong key={i} className="font-bold text-inherit">{part}</strong>;
+                }
+                return <span key={i}>{part}</span>;
+            })}
+        </span>
+    );
+};
 
-  const initBlueprint = async () => {
-      setIsGenerating(true);
-      try {
-          const bp = await generateDesignBlueprint(job, resume);
-          setBlueprint(bp);
-          if (onUpdate) onUpdate({ ...resume, designBlueprint: bp });
-      } catch (e) {
-          console.error("Failed to init blueprint", e);
-      } finally {
-          setIsGenerating(false);
-      }
-  };
+// --- MINIMALIST LAYOUT ---
+const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig }) => {
+    const isOnePage = theme.targetPageCount === 1;
+    const isThreePage = theme.targetPageCount === 3;
 
-  const handleExport = async () => {
-    setIsExporting(true);
-    const element = document.getElementById('resume-canvas');
-    if (!element) return;
-    
-    // Reset scale for export
-    const originalTransform = element.style.transform;
-    element.style.transform = 'scale(1)';
-    
-    const opt = {
-      margin: 0,
-      filename: `${resume.fullName.replace(/\s+/g, '_')}_Resume.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true, scrollY: 0 },
-      jsPDF: { unit: 'mm', format: blueprint?.page_settings.format.toLowerCase() || 'a4', orientation: 'portrait' }
-    };
+    const spacingClass = theme.density === 'Compact' || isOnePage ? 'space-y-4' : theme.density === 'Comfortable' || isThreePage ? 'space-y-8' : 'space-y-6';
+    const headerSize = theme.density === 'Compact' || isOnePage ? 'text-2xl' : 'text-3xl';
+    const bodySize = theme.density === 'Compact' || isOnePage ? 'text-[10px] leading-relaxed' : 'text-xs leading-relaxed';
+    const sectionHeaderSize = theme.density === 'Compact' || isOnePage ? 'text-xs mb-2' : 'text-sm mb-3';
 
-    try {
-      await html2pdf().set(opt).from(element).save();
-    } finally {
-      element.style.transform = originalTransform;
-      setIsExporting(false);
-    }
-  };
+    const renderSectionContent = (sectionName: string) => {
+        // Strict check for false. Undefined means visible.
+        if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
 
-  const toggleVisibility = (sectionId: string) => {
-    if (!blueprint || !onUpdate) return;
-    const nextBp = {
-        ...blueprint,
-        section_configs: {
-            ...blueprint.section_configs,
-            [sectionId]: { 
-                ...(blueprint.section_configs[sectionId] || {}), 
-                visible: !blueprint.section_configs[sectionId]?.visible 
-            }
+        switch(sectionName) {
+            case 'summary':
+                return resume.summary ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Professional Summary</h3>
+                        <p className={`${bodySize} text-gray-800 text-justify`}>{resume.summary}</p>
+                    </div>
+                ) : null;
+            case 'experience':
+                return resume.experience.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Work Experience</h3>
+                        <div className={`${isOnePage ? 'space-y-3' : 'space-y-5'}`}>
+                            {resume.experience.filter(e => e.visible !== false).map((e, i) => (
+                                <div key={i}>
+                                    <div className="flex justify-between items-baseline mb-0.5">
+                                        <h4 className="font-bold text-sm text-gray-900">{e.role}</h4>
+                                        <span className="text-xs font-medium text-gray-500 font-mono">{e.period}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-xs font-semibold text-gray-700 italic">{e.company}</span>
+                                        {e.location && <span className="text-[10px] text-gray-400">{e.location}</span>}
+                                    </div>
+                                    <ul className={`list-disc ml-3 space-y-0.5 text-gray-600 ${bodySize} marker:text-gray-300`}>
+                                        {e.bullets.filter(b => b.visible !== false).map(b => (
+                                            <li key={b.id} className="pl-1"><ImpactHighlighter text={b.text} /></li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null;
+            case 'education':
+                return resume.education ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Education</h3>
+                        <div className={`whitespace-pre-wrap ${bodySize} text-gray-800`}>{resume.education}</div>
+                    </div>
+                ) : null;
+            case 'projects':
+                return resume.projects.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Projects</h3>
+                        <div className="space-y-3">
+                            {resume.projects.map((p, i) => (
+                                <div key={i}>
+                                    <div className="flex justify-between items-baseline">
+                                        <div className="font-bold text-sm text-gray-900">{p.name}</div>
+                                        {p.link && <span className="text-[9px] text-blue-600 underline decoration-blue-200">{p.link.replace(/^https?:\/\//, '')}</span>}
+                                    </div>
+                                    <p className={`${bodySize} text-gray-600 mt-0.5`}>{p.description}</p>
+                                    {p.technologies && p.technologies.length > 0 && (
+                                        <div className="flex gap-2 mt-1">
+                                            {p.technologies.map(t => <span key={t} className="text-[9px] bg-gray-100 text-gray-600 px-1.5 rounded">{t}</span>)}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null;
+            case 'certifications':
+                return resume.certifications.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Certifications</h3>
+                        <div className={isOnePage ? "grid grid-cols-2 gap-x-4 gap-y-1" : "space-y-2"}>
+                            {resume.certifications.map((c, i) => (
+                                <div key={i} className={`flex justify-between ${isOnePage ? 'text-[9px]' : 'text-xs'}`}>
+                                    <span className="font-bold text-gray-800 truncate pr-2">{c.name}</span> 
+                                    <span className="text-gray-500 whitespace-nowrap">{c.issuer} • {c.date}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null;
+            case 'skills':
+                return (resume.skills.length > 0 || (resume.skillCategories && resume.skillCategories.length > 0)) ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Skills</h3>
+                        {resume.skillCategories && resume.skillCategories.length > 0 ? (
+                            <div className="space-y-2">
+                                {resume.skillCategories.map((cat, i) => (
+                                    <div key={i} className="flex gap-2 text-xs">
+                                        <span className="font-bold text-gray-700 min-w-[120px]">{cat.name}:</span>
+                                        <span className="text-gray-600 flex-1">{cat.skills.join(', ')}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className={`leading-relaxed text-gray-700 ${isOnePage ? 'text-[10px]' : 'text-xs'}`}>
+                                {resume.skills.join(' • ')}
+                            </div>
+                        )}
+                    </div>
+                ) : null;
+            case 'languages':
+                return resume.languages.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Languages</h3>
+                        <p className={`text-gray-700 ${isOnePage ? 'text-[10px]' : 'text-xs'}`}>{resume.languages.join(' • ')}</p>
+                    </div>
+                ) : null;
+            case 'awards':
+                return resume.awards && resume.awards.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Awards & Scholarships</h3>
+                        <ul className={`list-disc ml-3 text-gray-600 ${bodySize}`}>
+                            {resume.awards.map((a, i) => <li key={i}>{a}</li>)}
+                        </ul>
+                    </div>
+                ) : null;
+            case 'interests':
+                return resume.interests && resume.interests.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Interests</h3>
+                        <p className={`text-gray-700 ${isOnePage ? 'text-[10px]' : 'text-xs'}`}>{resume.interests.join(' • ')}</p>
+                    </div>
+                ) : null;
+            case 'affiliations':
+                return resume.affiliations && resume.affiliations.length > 0 ? (
+                    <div className="mb-4">
+                        <h3 className={`font-bold text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-1 ${sectionHeaderSize}`}>Affiliations</h3>
+                        <div className="space-y-2">
+                            {resume.affiliations.map((a, i) => (
+                                <div key={i} className="flex justify-between items-baseline">
+                                    <span className="text-sm font-medium text-gray-800">{a.role}, {a.organization}</span>
+                                    <span className="text-xs text-gray-500">{a.period}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null;
+            default: return null;
         }
     };
-    setBlueprint(nextBp);
-    onUpdate({ ...resume, designBlueprint: nextBp });
-  };
 
-  const updateTokens = (updates: Partial<DesignBlueprint['tokens']>) => {
-    if (!blueprint || !onUpdate) return;
-    const nextBp = { ...blueprint, tokens: { ...blueprint.tokens, ...updates } };
-    setBlueprint(nextBp);
-    onUpdate({ ...resume, designBlueprint: nextBp });
-  };
-
-  const getFontStack = (font: string) => {
-      const stacks: Record<string, string> = {
-          'Inter': "'Inter', sans-serif",
-          'Merriweather': "'Merriweather', serif",
-          'Roboto': "'Roboto', sans-serif",
-          'Source Sans 3': "'Source Sans 3', sans-serif",
-          'Lora': "'Lora', serif"
-      };
-      return stacks[font] || "sans-serif";
-  };
-
-  // Rendering logic for a single section
-  const renderSection = (id: string) => {
-    const config = blueprint?.section_configs[id] || { visible: true, variant: 'Standard' };
-    const userOverride = resume.visibleSections[id] !== false;
-    
-    // Logic: If blueprint says hidden, it's hidden. If userOverride is false, it's hidden.
-    if (config.visible === false || !userOverride) return null;
-
-    let content = null;
-    switch(id) {
-        case 'summary': content = <p className="summary-text">{resume.summary}</p>; break;
-        case 'experience': content = <Experience items={resume.experience} />; break;
-        case 'skills': content = <Skills skills={resume.skills} categories={resume.skillCategories} />; break;
-        case 'education': content = <p className="edu-text">{resume.education}</p>; break;
-        case 'projects': content = (
-            <div className="projects-list">
-                {resume.projects.filter(p => p.visible !== false).map((p, i) => (
-                    <div key={p.id || i} className="project-item">
-                        <div className="proj-head">
-                            <span className="name">{p.name}</span>
-                            {p.link && <span className="link">{p.link.replace(/^https?:\/\//, '')}</span>}
-                        </div>
-                        <p className="desc">{p.description}</p>
-                    </div>
-                ))}
-            </div>
-        ); break;
-        case 'certifications': content = (
-            <div className="certs-grid">
-                {resume.certifications.filter(c => c.visible !== false).map((c, i) => (
-                    <div key={c.id || i} className="cert-item">
-                        <span className="name">{c.name}</span>
-                        <span className="meta">{c.issuer} • {c.date}</span>
-                    </div>
-                ))}
-            </div>
-        ); break;
-        default: return null;
-    }
+    // Robust ordering: merge explicit order with any missing sections to ensure nothing is lost
+    const sectionOrder = useMemo(() => {
+        const baseOrder = resume.sectionOrder || [];
+        const allPossible = ['summary', 'experience', 'education', 'projects', 'certifications', 'skills', 'languages', 'awards', 'interests', 'affiliations'];
+        const missing = allPossible.filter(s => !baseOrder.includes(s));
+        return [...baseOrder, ...missing];
+    }, [resume.sectionOrder]);
 
     return (
-        <section key={id} className={`section-${id} resume-section`}>
-            <SectionHeader>{id.replace('_', ' ').toUpperCase()}</SectionHeader>
-            {content}
-        </section>
-    );
-  };
+        <div className="h-full p-10 bg-white text-gray-900 font-sans selection:bg-gray-200">
+            {/* Header */}
+            <header className="mb-8">
+                <h1 className={`font-bold uppercase tracking-tight text-gray-900 mb-1 ${headerSize}`}>{resume.fullName}</h1>
+                <div className="text-lg font-medium text-gray-600 mb-3">{resume.role}</div>
+                <div className={`flex flex-wrap gap-3 text-gray-500 font-medium ${isOnePage ? 'text-[10px]' : 'text-xs'}`}>
+                    {resume.email && <span>{resume.email}</span>}
+                    {resume.phone && <span>| {resume.phone}</span>}
+                    {resume.location && <span>| {resume.location}</span>}
+                    {resume.linkedin && <span>| {resume.linkedin.replace(/^https?:\/\//, '')}</span>}
+                    {resume.website && <span>| {resume.website.replace(/^https?:\/\//, '')}</span>}
+                </div>
+            </header>
 
-  if (!blueprint) {
-    return (
-        <div className="h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4">
-            <Loader2 className="w-10 h-10 animate-spin text-indigo-600" />
-            <p className="font-bold animate-pulse uppercase tracking-widest text-xs">Architecting Blueprint...</p>
+            {/* Content */}
+            <div className={spacingClass}>
+                {sectionOrder.map(s => <React.Fragment key={s}>{renderSectionContent(s)}</React.Fragment>)}
+            </div>
         </div>
     );
-  }
+};
+
+const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, onUpdate, onApplySuggestion, job }) => {
+  const [showAppearance, setShowAppearance] = useState(false);
+  const [scale, setScale] = useState(1); 
+  const [suggestions, setSuggestions] = useState<PreviewSuggestion[]>([]);
+  const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState<TemplateRecommendation | null>(null);
+  const [activeTab, setActiveTab] = useState<'templates' | 'layout' | 'sections' | 'style'>('templates');
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const optimizedResume = useContentOptimizer(resume, resume.themeConfig);
+
+  useEffect(() => {
+      const observer = new ResizeObserver((entries) => {
+          if (entries[0]) {
+              const containerWidth = entries[0].contentRect.width;
+              const targetWidth = resume.themeConfig.pageSize === 'Letter' ? 816 : 794; 
+              const padding = 64; 
+              const availableWidth = containerWidth - padding;
+              const newScale = Math.min(availableWidth / targetWidth, 1.2); 
+              setScale(newScale > 0.3 ? newScale : 0.3);
+          }
+      });
+      if (containerRef.current) observer.observe(containerRef.current);
+      return () => observer.disconnect();
+  }, [resume.themeConfig.pageSize]);
+
+  useEffect(() => {
+      if (job && resume) {
+          setIsGeneratingSuggestions(true);
+          Promise.all([
+              generatePreviewSuggestions(resume, job),
+              recommendTemplate(job)
+          ]).then(([suggs, rec]) => {
+              setSuggestions(suggs);
+              setAiRecommendation(rec);
+          }).catch(console.error).finally(() => setIsGeneratingSuggestions(false));
+      }
+  }, [resume.id, job]);
+
+  const theme = resume.themeConfig;
+  const updateTheme = (updates: Partial<ResumeThemeConfig>) => onThemeUpdate && onThemeUpdate({ ...theme, ...updates });
+
+  const toggleSectionVisibility = (e: React.MouseEvent, sectionId: string) => {
+      e.stopPropagation(); // Critical for avoiding parent click capture
+      if (!onUpdate) return;
+      
+      const currentVisibility = resume.visibleSections || {};
+      const isVisible = currentVisibility[sectionId] !== false; // default true
+      
+      onUpdate({
+          ...resume,
+          visibleSections: {
+              ...currentVisibility,
+              [sectionId]: !isVisible
+          }
+      });
+  };
+
+  // Robustly determine active sections for the sidebar, including any missing from order
+  const activeSections = useMemo(() => {
+      const currentOrder = resume.sectionOrder || [];
+      const allPossible = ['summary', 'experience', 'education', 'skills', 'projects', 'certifications', 'languages', 'awards', 'interests', 'affiliations'];
+      const missing = allPossible.filter(s => !currentOrder.includes(s));
+      return [...currentOrder, ...missing];
+  }, [resume.sectionOrder]);
+
+  const moveSection = (e: React.MouseEvent, index: number, direction: 'up' | 'down') => {
+      e.stopPropagation();
+      if (!onUpdate) return;
+      
+      // We must use the full list to ensure we don't lose items during reorder
+      const newOrder = [...activeSections];
+      
+      if (direction === 'up' && index > 0) {
+          [newOrder[index], newOrder[index - 1]] = [newOrder[index - 1], newOrder[index]];
+      } else if (direction === 'down' && index < newOrder.length - 1) {
+          [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      }
+      onUpdate({ ...resume, sectionOrder: newOrder });
+  };
+
+  const handleDownloadPDF = async () => {
+      setIsDownloading(true);
+      const element = document.getElementById('resume-preview-content');
+      if (!element) { setIsDownloading(false); return; }
+      
+      const wrapper = document.getElementById('resume-preview-scale-wrapper');
+      const originalTransform = wrapper?.style.transform;
+      if (wrapper) wrapper.style.transform = 'scale(1)';
+      
+      const opt = { 
+          margin: 0, 
+          filename: `${resume.fullName.replace(/\s+/g, '_')}_Resume.pdf`, 
+          image: { type: 'jpeg', quality: 0.98 }, 
+          html2canvas: { scale: 2, useCORS: true, scrollY: 0 }, 
+          jsPDF: { unit: 'mm', format: theme.pageSize === 'Letter' ? 'letter' : 'a4', orientation: 'portrait' } 
+      };
+      
+      try { 
+          await html2pdf().set(opt).from(element).save(); 
+      } catch (err) { 
+          alert("Download failed. Please try printing to PDF (Ctrl+P)."); 
+      } finally { 
+          if (wrapper) wrapper.style.transform = originalTransform || ''; 
+          setIsDownloading(false); 
+      }
+  };
+
+  const getPageDimensions = () => {
+      if (theme.pageSize === 'Letter') return { width: '215.9mm', minHeight: '279.4mm' }; 
+      return { width: '210mm', minHeight: '297mm' }; 
+  };
+
+  const { width, minHeight } = getPageDimensions();
+
+  const getFontFamily = () => {
+      if (['Merriweather', 'Lora', 'Georgia'].includes(theme.font)) return 'font-serif';
+      if (['JetBrains Mono', 'Courier New'].includes(theme.font)) return 'font-mono';
+      return 'font-sans';
+  };
 
   return (
-    <div className="h-full flex flex-col bg-slate-100 overflow-hidden relative selection:bg-indigo-100">
-        
+    <div className="w-full h-full flex flex-col bg-slate-100 relative">
         {/* TOP TOOLBAR */}
-        <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-30 shadow-sm">
+        <div className="bg-white px-4 py-2 flex items-center justify-between border-b border-slate-200 z-30 print:hidden h-14 shrink-0 shadow-sm">
             <div className="flex items-center gap-4">
-                <button 
-                    onClick={() => setShowStudio(!showStudio)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${showStudio ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400'}`}
-                >
-                    <PaletteIcon className="w-4 h-4" /> Design Studio
+                <button onClick={() => setShowAppearance(!showAppearance)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${showAppearance ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:text-slate-900'}`}>
+                    <Palette className="w-4 h-4" /> Design Studio
                 </button>
-                <div className="h-4 w-px bg-slate-200"></div>
-                <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                    <button onClick={() => setScale(s => Math.max(0.4, s - 0.1))} className="p-1 hover:bg-white rounded transition-colors"><ZoomOut className="w-4 h-4 text-slate-400"/></button>
-                    <span className="text-[10px] w-10 text-center font-mono font-bold text-slate-500">{Math.round(scale * 100)}%</span>
-                    <button onClick={() => setScale(s => Math.min(1.5, s + 0.1))} className="p-1 hover:bg-white rounded transition-colors"><ZoomIn className="w-4 h-4 text-slate-400"/></button>
+                <div className="h-6 w-px bg-slate-200"></div>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => updateTheme({ targetPageCount: 1 })} className={`text-[10px] font-bold px-3 py-1.5 rounded border transition-all ${theme.targetPageCount === 1 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>1 Page</button>
+                    <button onClick={() => updateTheme({ targetPageCount: 2 })} className={`text-[10px] font-bold px-3 py-1.5 rounded border transition-all ${theme.targetPageCount === 2 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>2 Pages</button>
+                    <button onClick={() => updateTheme({ targetPageCount: 3 })} className={`text-[10px] font-bold px-3 py-1.5 rounded border transition-all ${theme.targetPageCount === 3 ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}>3 Pages</button>
                 </div>
+                <div className="h-6 w-px bg-slate-200"></div>
+                <div className="flex items-center gap-1 bg-slate-50 rounded-lg p-1 border border-slate-200 ml-2">
+                    <button onClick={() => setScale(Math.max(0.3, scale - 0.1))} className="p-1 hover:bg-white rounded text-slate-400"><ZoomOut className="w-3.5 h-3.5"/></button>
+                    <span className="text-[10px] w-8 text-center font-mono text-slate-500">{Math.round(scale * 100)}%</span>
+                    <button onClick={() => setScale(Math.min(1.2, scale + 0.1))} className="p-1 hover:bg-white rounded text-slate-400"><ZoomIn className="w-3.5 h-3.5"/></button>
+                 </div>
             </div>
-
-            <button 
-                onClick={handleExport}
-                disabled={isExporting}
-                className="flex items-center gap-2 px-5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95 disabled:opacity-50"
-            >
-                {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                Export PDF
+            <button onClick={handleDownloadPDF} disabled={isDownloading} className="flex items-center gap-2 px-4 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-md active:scale-95 shadow-slate-900/10">
+                {isDownloading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4"/>} 
+                {isDownloading ? 'Rendering...' : 'Download PDF'}
             </button>
         </div>
 
-        {/* MAIN RENDERING AREA */}
-        <div className="flex-1 overflow-auto p-12 flex justify-center bg-slate-200/40 custom-scrollbar relative">
-            <div 
-                className="origin-top shadow-[0_30px_60px_-15px_rgba(0,0,0,0.15)] transition-transform duration-300 ease-out" 
-                style={{ transform: `scale(${scale})` }}
-            >
+        {/* DESIGN STUDIO DRAWER */}
+        {showAppearance && (
+            <div className="absolute top-14 left-0 w-80 bottom-0 bg-white/95 backdrop-blur-xl border-r border-slate-200 z-40 shadow-2xl animate-in slide-in-from-left-2 flex flex-col">
+               <div className="flex border-b border-slate-200">
+                   {['templates', 'layout', 'sections', 'style'].map(tab => (
+                       <button 
+                            key={tab} 
+                            onClick={() => setActiveTab(tab as any)}
+                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wide border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                       >
+                           {tab.slice(0,4)}
+                       </button>
+                   ))}
+               </div>
+
+               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                   
+                   {activeTab === 'templates' && (
+                       <div className="space-y-4">
+                           <h4 className="text-xs font-bold text-slate-400 uppercase">Premium Templates</h4>
+                           <div className="grid grid-cols-1 gap-2">
+                               {['Executive', 'Minimalist', 'Creative', 'Academic', 'ATS', 'International'].map((l) => (
+                                   <button 
+                                        key={l} 
+                                        onClick={() => updateTheme({ layout: l as any })} 
+                                        className={`p-3 rounded-lg border text-sm font-bold transition-all text-left flex justify-between items-center ${
+                                            theme.layout === l ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
+                                        }`}
+                                    >
+                                       {l}
+                                       {theme.layout === l && <Check className="w-4 h-4"/>}
+                                   </button>
+                               ))}
+                           </div>
+                       </div>
+                   )}
+
+                   {activeTab === 'layout' && (
+                       <div className="space-y-6">
+                           <div>
+                               <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Paper Size</h4>
+                               <div className="flex bg-slate-100 p-1 rounded-lg">
+                                   {['A4', 'Letter'].map(s => (
+                                       <button key={s} onClick={() => updateTheme({ pageSize: s as any })} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${theme.pageSize === s ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>{s}</button>
+                                   ))}
+                               </div>
+                           </div>
+                           <div>
+                               <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Information Density</h4>
+                               <div className="flex flex-col gap-2">
+                                   {['Compact', 'Standard', 'Comfortable'].map(d => (
+                                       <button key={d} onClick={() => updateTheme({ density: d as any })} className={`px-3 py-2 text-xs font-bold rounded-lg border text-left transition-all ${theme.density === d ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-white text-slate-600'}`}>
+                                           {d}
+                                       </button>
+                                   ))}
+                               </div>
+                           </div>
+                       </div>
+                   )}
+
+                   {activeTab === 'sections' && (
+                       <div className="space-y-4">
+                           <h4 className="text-xs font-bold text-slate-400 uppercase">Section Visibility & Order</h4>
+                           <div className="space-y-2">
+                               {activeSections.map((section, idx) => {
+                                   const isVisible = resume.visibleSections?.[section] !== false;
+                                   return (
+                                       <div key={section} className={`flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg group hover:border-indigo-300 transition-all ${!isVisible ? 'opacity-50 grayscale' : ''}`}>
+                                           <div className="flex items-center gap-3">
+                                               <GripVertical className="w-4 h-4 text-slate-300 cursor-move" />
+                                               <span className={`text-sm font-bold capitalize ${isVisible ? 'text-slate-700' : 'text-slate-400 line-through'}`}>{section}</span>
+                                           </div>
+                                           <div className="flex items-center gap-2">
+                                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity mr-2">
+                                                    <button onClick={(e) => moveSection(e, idx, 'up')} disabled={idx === 0} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-900 disabled:opacity-30"><MoveUp className="w-3.5 h-3.5"/></button>
+                                                    <button onClick={(e) => moveSection(e, idx, 'down')} disabled={idx === activeSections.length - 1} className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-900 disabled:opacity-30"><MoveDown className="w-3.5 h-3.5"/></button>
+                                                </div>
+                                                <button 
+                                                    onClick={(e) => toggleSectionVisibility(e, section)} 
+                                                    className={`p-1.5 rounded-md transition-colors ${isVisible ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400 bg-slate-100'}`}
+                                                    title={isVisible ? 'Hide Section' : 'Show Section'}
+                                                >
+                                                    {isVisible ? <Eye className="w-4 h-4"/> : <EyeOff className="w-4 h-4"/>}
+                                                </button>
+                                           </div>
+                                       </div>
+                                   );
+                               })}
+                           </div>
+                       </div>
+                   )}
+                   
+                   {activeTab === 'style' && (
+                       <div className="space-y-6">
+                           <div>
+                               <h4 className="text-xs font-bold text-slate-400 uppercase mb-3">Typography</h4>
+                               <div className="grid grid-cols-2 gap-2">
+                                   {['Inter', 'Merriweather', 'Roboto', 'JetBrains Mono', 'Lora', 'Georgia'].map((f) => (
+                                       <button 
+                                            key={f} 
+                                            onClick={() => updateTheme({ font: f as any })} 
+                                            className={`p-2 rounded border text-xs transition-all truncate ${theme.font === f ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'}`} 
+                                            style={{ fontFamily: f }}
+                                        >
+                                            {f}
+                                       </button>
+                                   ))}
+                               </div>
+                           </div>
+                       </div>
+                   )}
+               </div>
+            </div>
+        )}
+
+        {/* MAIN PREVIEW AREA */}
+        <div className="flex-1 flex overflow-hidden">
+            <div ref={containerRef} className="flex-1 overflow-auto bg-slate-200/50 p-8 flex justify-center relative custom-scrollbar">
                 <div 
-                    id="resume-canvas"
-                    className={`bg-white relative overflow-hidden layout-${blueprint.layout_id}`}
-                    style={{
-                        width: blueprint.page_settings.format === 'A4' ? '210mm' : '215.9mm',
-                        minHeight: blueprint.page_settings.format === 'A4' ? '297mm' : '279.4mm',
-                        padding: blueprint.page_settings.margins,
-                        /* CSS VARIABLE INJECTION */
-                        // @ts-ignore
-                        "--color-primary": blueprint.tokens.primary,
-                        "--color-secondary": blueprint.tokens.secondary,
-                        "--color-accent": blueprint.tokens.accent,
-                        "--color-text-main": blueprint.tokens.text_main,
-                        "--color-text-muted": blueprint.tokens.text_muted,
-                        "--color-divider": blueprint.tokens.divider,
-                        "--font-heading": getFontStack(blueprint.typography.heading_family),
-                        "--font-body": getFontStack(blueprint.typography.body_family),
-                        "--font-size-base": blueprint.typography.base_size,
-                        "--line-height": blueprint.typography.line_height,
-                        "--spacing-section": blueprint.typography.section_spacing,
-                        "--spacing-item": blueprint.typography.item_spacing,
-                        "--weight-heading": blueprint.typography.heading_weight
-                    }}
+                    id="resume-preview-scale-wrapper" 
+                    style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }} 
+                    className="shadow-2xl shadow-slate-300 bg-white origin-top transition-transform duration-200 ease-out h-fit ring-1 ring-black/5"
                 >
-                    {/* ENGINE STYLES (Scoped to canvas) */}
-                    <style dangerouslySetInnerHTML={{ __html: `
-                        #resume-canvas {
-                            color: var(--color-text-main);
-                            font-family: var(--font-body);
-                            line-height: var(--line-height);
-                            font-size: var(--font-size-base);
-                        }
-                        #resume-canvas .resume-header {
-                            margin-bottom: var(--spacing-section);
-                            text-align: center;
-                        }
-                        #resume-canvas .resume-header .name {
-                            font-family: var(--font-heading);
-                            font-size: 2.5em;
-                            font-weight: var(--weight-heading);
-                            letter-spacing: -0.02em;
-                            margin-bottom: 0.1em;
-                            color: var(--color-primary);
-                            text-transform: uppercase;
-                        }
-                        #resume-canvas .resume-header .role-tag {
-                            font-weight: 600;
-                            color: var(--color-accent);
-                            text-transform: uppercase;
-                            letter-spacing: 0.1em;
-                            font-size: 0.9em;
-                            margin-bottom: 0.5em;
-                        }
-                        #resume-canvas .resume-header .contact-strip {
-                            display: flex;
-                            justify-content: center;
-                            gap: 1.5em;
-                            font-size: 0.75em;
-                            color: var(--color-text-muted);
-                            font-weight: 500;
-                        }
-                        #resume-canvas .section-title {
-                            font-family: var(--font-heading);
-                            font-size: 1.1em;
-                            font-weight: 700;
-                            color: var(--color-accent);
-                            border-bottom: 1px solid var(--color-divider);
-                            padding-bottom: 0.3em;
-                            margin-bottom: 0.8em;
-                            text-transform: uppercase;
-                            letter-spacing: 0.05em;
-                        }
-                        #resume-canvas .resume-section {
-                            margin-bottom: var(--spacing-section);
-                            page-break-inside: avoid;
-                        }
-                        #resume-canvas .summary-text {
-                            text-align: justify;
-                            font-size: 0.9em;
-                        }
-                        #resume-canvas .experience-item {
-                            margin-bottom: var(--spacing-item);
-                            page-break-inside: avoid;
-                        }
-                        #resume-canvas .experience-item .row-main {
-                            display: flex;
-                            justify-content: space-between;
-                            font-weight: 700;
-                            font-size: 0.95em;
-                        }
-                        #resume-canvas .experience-item .row-sub {
-                            display: flex;
-                            justify-content: space-between;
-                            font-style: italic;
-                            font-size: 0.85em;
-                            color: var(--color-secondary);
-                            margin-bottom: 0.4em;
-                        }
-                        #resume-canvas .bullets {
-                            list-style: disc;
-                            margin-left: 1.2em;
-                            font-size: 0.85em;
-                        }
-                        #resume-canvas .bullets li {
-                            margin-bottom: 0.2em;
-                            padding-left: 0.3em;
-                        }
-                        #resume-canvas .skill-tag {
-                            display: inline-block;
-                            padding: 0.2em 0.5em;
-                            margin: 0.2em;
-                            background: var(--color-divider);
-                            border-radius: 4px;
-                            font-size: 0.75em;
-                            font-weight: 600;
-                        }
-                        #resume-canvas.layout-SidebarLeft {
-                            display: grid;
-                            grid-template-columns: 1fr 2.5fr;
-                            gap: 20mm;
-                        }
-                        #resume-canvas.layout-SidebarLeft .resume-header {
-                            grid-column: 1 / -1;
-                        }
-                    `}} />
-
-                    {/* CONTENT LAYOUT */}
-                    <ResumeHeader resume={resume} />
-                    
-                    <div className="resume-body-content">
-                        {resume.sectionOrder.map(renderSection)}
-                    </div>
-
-                    {/* Footer Marker (Visible only in UI) */}
-                    <div className="absolute bottom-4 right-4 text-[8px] font-mono text-slate-300 uppercase tracking-widest pointer-events-none print:hidden">
-                        A4 Engine v3.2 Optimized
+                    <div 
+                        id="resume-preview-content" 
+                        className={`${getFontFamily()} antialiased`}
+                        style={{ 
+                            width: width, 
+                            minHeight: minHeight, 
+                            backgroundColor: 'white', 
+                            overflow: 'hidden', 
+                            fontFamily: theme.font,
+                            lineHeight: theme.density === 'Compact' ? 1.2 : theme.density === 'Comfortable' ? 1.6 : 1.4,
+                            fontSize: theme.density === 'Compact' ? '13px' : '14px'
+                        }}
+                    >
+                        {/* Renderer Switcher */}
+                        {theme.layout === 'Minimalist' ? (
+                            <MinimalistLayout resume={optimizedResume} theme={theme} />
+                        ) : (
+                            // Use Minimalist as default fallback for now to prevent crashes
+                            <MinimalistLayout resume={optimizedResume} theme={theme} /> 
+                        )}
                     </div>
                 </div>
             </div>
         </div>
-
-        {/* DESIGN STUDIO DRAWER */}
-        {showStudio && (
-            <div className="absolute left-0 top-14 bottom-0 w-80 bg-white border-r border-slate-200 z-40 shadow-2xl animate-in slide-in-from-left duration-300 flex flex-col">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 backdrop-blur-xl">
-                    <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-indigo-500" />
-                        Design Intelligence
-                    </h3>
-                    <button onClick={() => setShowStudio(false)} className="text-slate-400 hover:text-slate-900 transition-colors">✕</button>
-                </div>
-
-                <div className="flex border-b border-slate-100">
-                    {['layout', 'style', 'visibility'].map(tab => (
-                        <button 
-                            key={tab} 
-                            onClick={() => setActiveStudioTab(tab as any)}
-                            className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all ${activeStudioTab === tab ? 'text-indigo-600 bg-indigo-50 border-b-2 border-indigo-600' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-                    
-                    {activeStudioTab === 'layout' && (
-                        <div className="space-y-6">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">Structural Blueprint</label>
-                                <div className="grid grid-cols-1 gap-2">
-                                    {['SingleColumn', 'SidebarLeft', 'SidebarRight'].map(id => (
-                                        <button 
-                                            key={id} 
-                                            onClick={() => {
-                                                const nextBp = { ...blueprint, layout_id: id as any };
-                                                setBlueprint(nextBp);
-                                                onUpdate && onUpdate({ ...resume, designBlueprint: nextBp });
-                                            }}
-                                            className={`p-3 rounded-xl border-2 text-left flex items-center justify-between transition-all ${blueprint.layout_id === id ? 'border-indigo-600 bg-indigo-50' : 'border-slate-100 hover:border-slate-300'}`}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-white rounded-lg shadow-sm">
-                                                    <Layout className="w-4 h-4 text-slate-600" />
-                                                </div>
-                                                <span className={`text-sm font-bold ${blueprint.layout_id === id ? 'text-indigo-900' : 'text-slate-600'}`}>{id.replace(/([A-Z])/g, ' $1').trim()}</span>
-                                            </div>
-                                            {blueprint.layout_id === id && <Check className="w-4 h-4 text-indigo-600" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeStudioTab === 'style' && (
-                        <div className="space-y-8">
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">Accent Palette</label>
-                                <div className="grid grid-cols-4 gap-3">
-                                    {['#4f46e5', '#10b981', '#ef4444', '#f59e0b', '#3b82f6', '#8b5cf6', '#0f172a', '#ec4899'].map(c => (
-                                        <button 
-                                            key={c}
-                                            onClick={() => updateTokens({ accent: c })}
-                                            className={`w-full aspect-square rounded-full border-2 transition-all hover:scale-110 shadow-sm ${blueprint.tokens.accent === c ? 'border-white ring-2 ring-indigo-500 scale-110' : 'border-transparent'}`}
-                                            style={{ backgroundColor: c }}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3 block">Typography</label>
-                                <div className="space-y-2">
-                                    {['Inter', 'Merriweather', 'Source Sans 3', 'Lora', 'Roboto'].map(f => (
-                                        <button 
-                                            key={f}
-                                            onClick={() => {
-                                                const nextBp = { ...blueprint, typography: { ...blueprint.typography, heading_family: f, body_family: f === 'Merriweather' ? 'Lora' : f } };
-                                                setBlueprint(nextBp);
-                                                onUpdate && onUpdate({ ...resume, designBlueprint: nextBp });
-                                            }}
-                                            className={`w-full p-2.5 rounded-lg border text-left text-sm transition-all ${blueprint.typography.heading_family === f ? 'border-indigo-200 bg-indigo-50 text-indigo-900 font-bold' : 'border-slate-200 text-slate-600'}`}
-                                            style={{ fontFamily: getFontStack(f) }}
-                                        >
-                                            {f}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeStudioTab === 'visibility' && (
-                        <div className="space-y-3">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 block">Active Components</label>
-                            {resume.sectionOrder.map(section => (
-                                <button 
-                                    key={section}
-                                    onClick={() => toggleVisibility(section)}
-                                    className={`w-full p-3 rounded-xl border flex items-center justify-between transition-all group ${blueprint.section_configs[section]?.visible !== false ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60'}`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-500 transition-colors" />
-                                        <span className={`text-sm font-bold capitalize ${blueprint.section_configs[section]?.visible !== false ? 'text-slate-700' : 'text-slate-400'}`}>
-                                            {section.replace('_', ' ')}
-                                        </span>
-                                    </div>
-                                    {blueprint.section_configs[section]?.visible !== false ? <Eye className="w-4 h-4 text-indigo-500" /> : <EyeOff className="w-4 h-4 text-slate-300" />}
-                                </button>
-                            ))}
-                        </div>
-                    )}
-
-                </div>
-
-                <div className="p-6 border-t border-slate-100 bg-slate-50/50">
-                    <button 
-                        onClick={initBlueprint}
-                        disabled={isGenerating}
-                        className="w-full py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-[0.98] disabled:opacity-50"
-                    >
-                        {isGenerating ? <Loader2 className="w-4 h-4 animate-spin"/> : <Sparkles className="w-4 h-4 text-indigo-400" />}
-                        Smart Regenerate
-                    </button>
-                </div>
-            </div>
-        )}
     </div>
   );
 };
