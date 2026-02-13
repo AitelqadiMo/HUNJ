@@ -1,6 +1,6 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,7 +9,45 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" integrity="sha512-GsLlZN/3F2ErC5ifS5QtgpiJtWd43JWSuIgh7mbzZ8zBps+dvLusV+eNQATqgA/HdeKFVgA5v3S/cIrLF7QnIg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Soft Tactile Scrollbar */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 99px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+      
+      /* Noise Texture - Subtle Grain */
+      .bg-noise {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+      }
+
+      /* Kinetic Text Clip Utility */
+      .text-gradient-kinetic {
+        background: linear-gradient(to right, #7c3aed, #db2777, #7c3aed);
+        background-size: 200% auto;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: gradient-x 4s linear infinite;
+      }
+      
+      .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+    </style>
     <script>
       // Initialize PDF.js worker
       window.onload = function() {
@@ -22,62 +60,50 @@
         theme: {
           extend: {
             fontFamily: {
-              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+              sans: ['Inter', 'sans-serif'],
+              display: ['"Space Grotesk"', 'sans-serif'],
               mono: ['"JetBrains Mono"', 'monospace'],
               serif: ['"Playfair Display"', 'serif'],
-              lora: ['"Lora"', 'serif'],
             },
             colors: {
-              // --- APPLE-ESQUE ELEGANCE PALETTE ---
-              // Neutral Slates, Crisp Whites, Deep Blacks.
-              
-              // Map 'devops' to a clean Slate scale for the UI
               devops: {
-                950: '#020617', // Very dark slate (almost black)
-                900: '#0f172a', // Sidebar / Dark Panels
-                800: '#1e293b', // Card BG (Dark Mode context)
-                700: '#334155', // Borders / Separators
-                600: '#475569', // Secondary Text
-                500: '#64748b', // Muted Text
-                400: '#94a3b8', // Icons / Hints
+                950: '#020617', // Deep Navy
+                900: '#0f172a',
+                800: '#1e293b',
+                700: '#334155',
+                600: '#475569', 
+                500: '#64748b', 
+                400: '#94a3b8', 
                 300: '#cbd5e1', 
-                200: '#e2e8f0', // Light Borders
-                100: '#f1f5f9', // Light Backgrounds
-                50: '#f8fafc',  // App Background (Off-white)
+                200: '#e2e8f0', 
+                100: '#f1f5f9', 
+                50: '#f8fafc', 
               },
-              
-              // Primary Brand Colors (Royal Blue / Indigo)
-              hunj: {
-                900: '#1e3a8a',
-                800: '#1e40af',
-                700: '#1d4ed8', 
-                600: '#2563eb', // Primary Action Blue (Apple-like)
-                500: '#3b82f6', // Hover State
-                400: '#60a5fa',
-                300: '#93c5fd', 
-                100: '#dbeafe',
-                50: '#eff6ff',
+              hunj: { // Electric Violet
+                600: '#7c3aed', 
+                500: '#8b5cf6', 
+                400: '#a78bfa', 
+                100: '#ede9fe',
+                50: '#f5f3ff',
               },
-              
-              // Accent Colors (Subtle Gold/Amber for specific highlights, or Secondary Blue)
-              accent: {
-                600: '#0284c7', // Sky Blue
-                500: '#0ea5e9', 
-                400: '#38bdf8', 
-                100: '#e0f2fe',
+              accent: { // Emerald/Lime
+                600: '#059669', // Emerald 600
+                500: '#10b981', 
+                400: '#34d399', 
+                100: '#d1fae5',
               },
-              
-              // Status Colors (Refined)
-              success: '#10b981', // Emerald
-              warning: '#f59e0b', // Amber
-              danger: '#ef4444',  // Red
+              success: '#10b981',
+              warning: '#f59e0b',
+              danger: '#ef4444',
             },
             animation: {
-              'blob': 'blob 10s infinite',
-              'fade-in-up': 'fadeInUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'blob': 'blob 20s infinite',
               'float': 'float 6s ease-in-out infinite',
-              'pulse-glow': 'pulseGlow 3s infinite',
-              'spin-slow': 'spin 3s linear infinite',
+              'gradient-x': 'gradient-x 4s linear infinite',
+              'slide-up-stagger': 'slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              'pulse-soft': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'pulse-slow': 'pulse 8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'shimmer': 'shimmer 2s linear infinite',
             },
             keyframes: {
               blob: {
@@ -86,106 +112,46 @@
                 '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
                 '100%': { transform: 'translate(0px, 0px) scale(1)' },
               },
-              fadeInUp: {
-                '0%': { opacity: '0', transform: 'translateY(20px)' },
-                '100%': { opacity: '1', transform: 'translateY(0)' },
-              },
               float: {
                 '0%, 100%': { transform: 'translateY(0)' },
                 '50%': { transform: 'translateY(-10px)' },
               },
-              pulseGlow: {
-                '0%, 100%': { boxShadow: '0 0 10px rgba(37, 99, 235, 0.1)' },
-                '50%': { boxShadow: '0 0 25px rgba(37, 99, 235, 0.2)' },
+              'gradient-x': {
+                '0%': { backgroundPosition: '0% 50%' },
+                '100%': { backgroundPosition: '200% 50%' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              },
+              shimmer: {
+                '0%': { transform: 'translateX(-100%)' },
+                '100%': { transform: 'translateX(100%)' },
               }
+            },
+            boxShadow: {
+              'tactile': '0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02), 0 10px 15px -3px rgba(0, 0, 0, 0.05)',
+              'tactile-hover': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01)',
+              'glow': '0 0 20px rgba(124, 58, 237, 0.3)',
             }
-          }
-        }
-      }
+          },
+        },
+      };
     </script>
-    <style>
-      body {
-        background-color: #f8fafc; /* Slate 50 */
-        color: #0f172a; /* Slate 900 */
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-      
-      /* Refined Scrollbar */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
-      }
-
-      /* Print Styles */
-      @page {
-        size: A4;
-        margin: 0;
-      }
-      @media print {
-        body {
-          visibility: hidden;
-          background: white;
-        }
-        #resume-preview-content, #resume-preview-content * {
-          visibility: visible;
-        }
-        #resume-preview-content {
-          visibility: visible;
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 210mm;
-          min-height: 297mm;
-          margin: 0;
-          padding: 0;
-          background: white !important;
-          color: black !important;
-          z-index: 9999;
-          transform: none !important;
-          box-shadow: none !important;
-          border: none !important;
-        }
-      }
-      
-      .glass-panel {
-        background: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.5);
-      }
-      
-      .gradient-text {
-        background-clip: text;
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-image: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
-      }
-    </style>
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "recharts": "https://esm.sh/recharts@^3.6.0"
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4"
   }
 }
 </script>
 </head>
-  <body>
+  <body class="bg-slate-50 text-slate-900 antialiased">
     <div id="root"></div>
   </body>
 </html>

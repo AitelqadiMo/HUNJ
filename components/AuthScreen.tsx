@@ -1,15 +1,62 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { User } from '../types';
+import { User, UserProfile, ResumeData } from '../types';
 import { storageService } from '../services/storageService';
 import { logger } from '../services/loggingService';
-import { Target, ArrowRight, Loader2, Info, AlertTriangle, UserCircle, Copy, Check } from 'lucide-react';
+import { Target, ArrowRight, Loader2, Info, AlertTriangle, UserCircle, Copy, Check, Sparkles, Fingerprint } from 'lucide-react';
 
 declare global {
     interface Window {
         google: any;
     }
 }
+
+// Default Data for seeding
+const INITIAL_RESUME: ResumeData = {
+  id: 'master',
+  versionName: 'Master v1',
+  timestamp: Date.now(),
+  style: 'Base',
+  design: 'Executive',
+  themeConfig: { 
+      layout: 'Executive', 
+      font: 'Inter', 
+      accentColor: '#4f46e5', 
+      pageSize: 'A4',
+      density: 'Standard',
+      targetPageCount: 2
+  },
+  fullName: '', role: '', email: '', phone: '', location: '', linkedin: '', website: '', contactInfo: '',
+  summary: '', summaryVisible: true, skills: [], languages: [], achievements: [], awards: [], interests: [], strengths: [],
+  education: '', educationVisible: true, experience: [], projects: [], certifications: [], publications: [], affiliations: [],
+  personalKnowledgeBase: [],
+  visibleSections: {
+      summary: true,
+      experience: true,
+      education: true,
+      skills: true,
+      projects: true,
+      certifications: true,
+      languages: true,
+      awards: true,
+      interests: true,
+      affiliations: true
+  },
+  sectionOrder: ['summary', 'experience', 'education', 'skills', 'projects', 'certifications', 'languages', 'awards', 'interests', 'affiliations']
+};
+
+const INITIAL_PROFILE: UserProfile = {
+    masterResume: INITIAL_RESUME,
+    applications: [],
+    privacyMode: false,
+    preferences: {
+        workAuthorization: 'US Citizen', availability: '1 Month', salaryExpectation: '', relocation: false, remotePreference: 'Hybrid',
+        targetRoles: [], targetIndustries: [], preferredTechStack: [], companySize: []
+    },
+    documents: [],
+    onboardingSeen: false,
+    profileComplete: false
+};
 
 interface AuthScreenProps {
   onLogin: (user: User, isNewUser: boolean) => void;
@@ -43,7 +90,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
               if (googleBtnRef.current) {
                   window.google.accounts.id.renderButton(
                       googleBtnRef.current,
-                      { theme: "filled_blue", size: "large", width: "100%", text: "continue_with", shape: "pill" }
+                      { theme: "filled_black", size: "large", width: "100%", text: "continue_with", shape: "pill" }
                   );
               }
           } catch (e) {
@@ -86,7 +133,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
 
   const handleGuestLogin = async () => {
       setLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 800)); // Cinematic delay
       
       const guestUser: User = {
           id: `guest-${Date.now()}`,
@@ -105,6 +152,13 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
       
       const existingUsers = storageService.getUsers();
       const exists = existingUsers.some(u => u.id === user.id);
+      
+      if (!exists || !storageService.loadUserProfile(user.id)) {
+          const newProfile = { ...INITIAL_PROFILE };
+          newProfile.masterResume.fullName = user.name;
+          newProfile.masterResume.email = user.email;
+          storageService.saveUserProfile(user.id, newProfile);
+      }
       
       onLogin(user, !exists);
       setLoading(false);
@@ -166,68 +220,81 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-          <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-gradient-to-br from-hunj-600/10 to-neon-cyan/10 rounded-full blur-[100px] animate-pulse"></div>
-          <div className="absolute bottom-[-10%] left-[-10%] w-[500px] h-[500px] bg-gradient-to-tr from-purple-500/10 to-blue-500/10 rounded-full blur-[80px]"></div>
+    <div className="min-h-screen bg-devops-950 flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans bg-noise">
+      
+      {/* Cinematic Background */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-hunj-600/20 rounded-full blur-[120px] animate-pulse-slow"></div>
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-transparent to-devops-950/80"></div>
       </div>
 
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-md animate-slide-up">
         
-        {/* Brand Header */}
-        <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-gradient-to-br from-slate-900 to-hunj-900 shadow-2xl shadow-hunj-600/20 mb-6 transform rotate-3 hover:rotate-0 transition-transform duration-500 border border-white/20">
-                <Target className="w-10 h-10 text-white" />
+        {/* The Singularity Core */}
+        <div className="flex flex-col items-center mb-10">
+            <div className="relative group cursor-pointer mb-6">
+                <div className="absolute -inset-1 bg-gradient-to-r from-hunj-500 to-accent-500 rounded-full blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
+                <div className="relative w-24 h-24 bg-devops-900 rounded-3xl flex items-center justify-center border border-white/10 shadow-2xl overflow-hidden glass-card">
+                    <div className="absolute inset-0 bg-gradient-to-br from-hunj-600/20 to-transparent"></div>
+                    <Target className="w-10 h-10 text-white relative z-10" />
+                    {/* Scanning effect */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-hunj-400/50 blur-sm animate-[scan_3s_ease-in-out_infinite]"></div>
+                </div>
             </div>
-            <h1 className="text-4xl font-extrabold text-slate-900 mb-2 tracking-tight">HUNJ</h1>
-            <p className="text-slate-500 font-medium">Hunt Your Job with Intelligence</p>
+            <h1 className="text-4xl font-display font-bold text-white mb-2 tracking-tight text-center">HUNJ</h1>
+            <div className="flex items-center gap-2 text-hunj-400 text-sm font-medium bg-hunj-500/10 px-3 py-1 rounded-full border border-hunj-500/20">
+                <Sparkles className="w-3 h-3" />
+                <span>Intelligent Career Acceleration</span>
+            </div>
         </div>
 
-        <div className="bg-white/80 border border-white/50 rounded-3xl shadow-2xl shadow-slate-200/50 p-8 backdrop-blur-xl">
-            {/* Tab Switcher */}
-            <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
+        {/* Glass Card */}
+        <div className="bg-devops-900/60 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-hunj-500 to-transparent opacity-50"></div>
+
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 gap-1 bg-devops-950/50 p-1 rounded-xl mb-6 border border-white/5">
                 <button 
                     onClick={() => { setIsRegistering(false); setError(null); }}
-                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${!isRegistering ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    className={`py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${!isRegistering ? 'bg-devops-800 text-white shadow-lg border border-white/5' : 'text-devops-400 hover:text-white'}`}
                 >
                     Log In
                 </button>
                 <button 
                     onClick={() => { setIsRegistering(true); setError(null); }}
-                    className={`flex-1 py-2.5 text-sm font-bold rounded-lg transition-all ${isRegistering ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                    className={`py-2.5 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${isRegistering ? 'bg-devops-800 text-white shadow-lg border border-white/5' : 'text-devops-400 hover:text-white'}`}
                 >
-                    Sign Up
+                    Initialize
                 </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
                 {isRegistering && (
                     <div className="space-y-1 animate-in fade-in slide-in-from-bottom-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Full Name</label>
+                        <label className="text-[10px] font-bold text-devops-400 uppercase tracking-widest ml-1">Identity</label>
                         <input 
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            className="w-full bg-white border border-slate-200 rounded-xl p-3.5 text-slate-900 focus:border-hunj-600 focus:ring-1 focus:ring-hunj-600 outline-none transition-all placeholder-slate-400 shadow-sm"
-                            placeholder="Alex Hunter"
+                            className="w-full bg-devops-950/50 border border-white/10 rounded-xl p-3.5 text-white focus:border-hunj-500 focus:ring-1 focus:ring-hunj-500 outline-none transition-all placeholder-devops-600"
+                            placeholder="Full Name"
                         />
                     </div>
                 )}
                 
                 <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Email Address</label>
+                    <label className="text-[10px] font-bold text-devops-400 uppercase tracking-widest ml-1">Access Key (Email)</label>
                     <input 
                         type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl p-3.5 text-slate-900 focus:border-hunj-600 focus:ring-1 focus:ring-hunj-600 outline-none transition-all placeholder-slate-400 shadow-sm"
-                        placeholder="alex@example.com"
+                        className="w-full bg-devops-950/50 border border-white/10 rounded-xl p-3.5 text-white focus:border-hunj-500 focus:ring-1 focus:ring-hunj-500 outline-none transition-all placeholder-devops-600"
+                        placeholder="user@example.com"
                     />
                 </div>
 
                 {error && (
-                    <div className="p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-red-600 text-xs font-medium">
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-xs font-medium animate-in fade-in">
                         <Info className="w-4 h-4 flex-shrink-0" />
                         {error}
                     </div>
@@ -236,70 +303,61 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                 <button 
                     type="submit"
                     disabled={loading}
-                    className="w-full py-3.5 bg-slate-900 hover:bg-hunj-600 text-white rounded-xl font-bold shadow-lg shadow-slate-900/20 hover:shadow-hunj-600/30 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-4"
+                    className="w-full py-4 bg-white text-devops-950 rounded-xl font-bold hover:bg-hunj-50 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed mt-2 shadow-[0_0_20px_rgba(255,255,255,0.2)] group"
                 >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : (
                         <>
-                            {isRegistering ? 'Start Hunting' : 'Welcome Back'}
-                            <ArrowRight className="w-4 h-4" />
+                            {isRegistering ? 'Establish Link' : 'Authenticate'}
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                         </>
                     )}
                 </button>
             </form>
 
             <div className="my-6 flex items-center gap-3">
-                <div className="h-px bg-slate-200 flex-1"></div>
-                <span className="text-xs text-slate-400 font-medium uppercase">Or continue with</span>
-                <div className="h-px bg-slate-200 flex-1"></div>
+                <div className="h-px bg-white/10 flex-1"></div>
+                <span className="text-[10px] text-devops-500 font-bold uppercase tracking-widest">Or Access Via</span>
+                <div className="h-px bg-white/10 flex-1"></div>
             </div>
 
-            {/* Google Button Area */}
             <div className="w-full flex flex-col gap-3">
-                
-                {/* Guest/Demo Fallback */}
                 <button 
                     onClick={handleGuestLogin}
                     disabled={loading}
-                    className="w-full py-3 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-full font-bold transition-all flex items-center justify-center gap-2 text-sm shadow-sm group"
+                    className="w-full py-3 bg-white/5 hover:bg-white/10 text-white border border-white/10 rounded-xl font-bold transition-all flex items-center justify-center gap-3 text-sm group"
                 >
-                    <UserCircle className="w-5 h-5 text-hunj-600 group-hover:scale-110 transition-transform" />
-                    Preview as Guest
+                    <Fingerprint className="w-5 h-5 text-hunj-400" />
+                    Guest Access
                 </button>
 
                 <div className="relative group flex justify-center mt-2 flex-col items-center">
-                    <div 
-                        id="google-btn-wrapper" 
-                        ref={googleBtnRef} 
-                        className="w-full flex justify-center min-h-[44px]"
-                    ></div>
+                    <div id="google-btn-wrapper" ref={googleBtnRef} className="w-full flex justify-center min-h-[44px]"></div>
                     
-                    {/* Developer Help Trigger */}
                     <button 
                         onClick={() => setShowDevHelp(!showDevHelp)}
-                        className="text-[10px] text-slate-400 hover:text-slate-600 mt-3 underline flex items-center gap-1"
+                        className="text-[10px] text-devops-600 hover:text-devops-400 mt-4 flex items-center gap-1 transition-colors"
                     >
-                        {showDevHelp ? 'Hide Help' : 'Developer: Getting Error 400?'}
+                        {showDevHelp ? 'Hide Console' : 'System Status: 400?'}
                     </button>
                 </div>
             </div>
             
-            {/* Developer Troubleshooting Panel */}
             {showDevHelp && (
-                <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-xl text-left animate-in fade-in slide-in-from-top-2">
+                <div className="mt-4 p-4 bg-orange-950/30 border border-orange-500/20 rounded-xl text-left animate-in fade-in slide-in-from-top-2">
                     <div className="flex items-center gap-2 mb-2">
                         <AlertTriangle className="w-4 h-4 text-orange-500" />
-                        <span className="text-xs font-bold text-orange-800">Fixing "Error 400: origin_mismatch"</span>
+                        <span className="text-xs font-bold text-orange-400">Origin Mismatch Detected</span>
                     </div>
-                    <p className="text-[10px] text-orange-700 mb-2 leading-relaxed">
-                        This error means your current deployed URL is not approved by Google. To fix it, you must add the URL below to your Google Cloud Console.
+                    <p className="text-[10px] text-orange-300 mb-3 leading-relaxed opacity-80">
+                        The current domain is not whitelisted in the Google Cloud Console.
                     </p>
-                    <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-orange-200">
-                        <code className="text-[10px] text-orange-900 flex-1 overflow-hidden truncate font-mono">
+                    <div className="flex items-center gap-2 bg-black/20 p-2 rounded-lg border border-orange-500/20">
+                        <code className="text-[10px] text-orange-200 flex-1 overflow-hidden truncate font-mono">
                             {typeof window !== 'undefined' ? window.location.origin : ''}
                         </code>
                         <button 
                             onClick={handleCopyOrigin}
-                            className="p-1.5 hover:bg-orange-100 rounded text-orange-600 transition-colors"
+                            className="p-1.5 hover:bg-orange-500/20 rounded text-orange-400 transition-colors"
                             title="Copy URL"
                         >
                             {copiedOrigin ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -307,12 +365,7 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                     </div>
                 </div>
             )}
-            
         </div>
-        
-        <p className="text-center text-xs text-slate-400 mt-8">
-            HUNJ stores data locally. By continuing, you agree to the Terms.
-        </p>
       </div>
     </div>
   );

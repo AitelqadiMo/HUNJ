@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { ResumeData, JobAnalysis, ExperienceItem, ProjectItem, CertificationItem, PublicationItem, AffiliationItem } from '../types';
-import { improveBulletPoint, updateResumeWithAI } from '../services/geminiService';
+import React, { useState, useEffect, useRef } from 'react';
+import { ResumeData, JobAnalysis, ExperienceItem, CertificationItem } from '../types';
+import { getInlineSuggestion, updateResumeWithAI } from '../services/geminiService';
 import useHistory from '../hooks/useHistory';
-import { Wand2, Save, RotateCcw, Plus, Trash2, Loader2, Eye, EyeOff, Undo2, Redo2 } from 'lucide-react';
+import { Wand2, Undo2, Redo2, Sparkles, Check, X, Plus, Trash2, Link as LinkIcon, Briefcase, GraduationCap, Trophy, ChevronDown, ChevronUp, Loader2, Zap, Tag, Globe, Award, Medal, BookOpen } from 'lucide-react';
 
 interface ResumeEditorProps {
   resume: ResumeData;
@@ -12,558 +12,419 @@ interface ResumeEditorProps {
 }
 
 const ResumeEditor: React.FC<ResumeEditorProps> = ({ resume, job, onUpdate }) => {
-  // Use the history hook instead of simple useState
   const { state: localResume, set: setLocalResume, undo, redo, canUndo, canRedo, reset } = useHistory<ResumeData>(resume);
+  const [improvingFieldId, setImprovingFieldId] = useState<string | null>(null);
   
-  const [improvingId, setImprovingId] = useState<string | null>(null);
-  const [improvingSummary, setImprovingSummary] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
 
-  // Sync when prop changes (e.g. switching resumes), but respect local history
   useEffect(() => {
-    if(resume.id !== localResume.id || resume.versionName !== localResume.versionName) {
-        reset(resume);
-    }
+    if(resume.id !== localResume.id || resume.versionName !== localResume.versionName) reset(resume);
   }, [resume.id, resume.versionName]);
 
-  // Debounce updates to parent (App.tsx)
   useEffect(() => {
-      const handler = setTimeout(() => {
-          if (localResume !== resume) {
-              onUpdate(localResume);
-          }
-      }, 800);
-
-      return () => {
-          clearTimeout(handler);
-      };
+      const handler = setTimeout(() => { if (localResume !== resume) onUpdate(localResume); }, 800);
+      return () => clearTimeout(handler);
   }, [localResume]);
 
-  // Keyboard Shortcuts for Undo/Redo
-  useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
-              if (e.shiftKey) {
-                  e.preventDefault();
-                  redo();
-              } else {
-                  e.preventDefault();
-                  undo();
-              }
-          }
-          if ((e.metaKey || e.ctrlKey) && e.key === 'y') {
-              e.preventDefault();
-              redo();
-          }
-      };
-
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [undo, redo]);
-
   const handleChange = (field: keyof ResumeData, value: any) => {
-    const updated = { ...localResume, [field]: value };
-    setLocalResume(updated);
+    setLocalResume({ ...localResume, [field]: value });
   };
 
-  const handleArrayChange = (field: 'skills' | 'languages' | 'achievements' | 'interests' | 'strengths', value: string) => {
-    handleChange(field, value.split(',').map(s => s.trim()));
-  };
-
-  const handleExperienceChange = (id: string, field: keyof ExperienceItem, value: any) => {
-    const updatedExp = localResume.experience.map(exp => 
-      exp.id === id ? { ...exp, [field]: value } : exp
-    );
-    handleChange('experience', updatedExp);
-  };
-
-  const toggleExperienceVisibility = (id: string) => {
-      const updatedExp = localResume.experience.map(exp => 
-        exp.id === id ? { ...exp, visible: exp.visible === false ? true : false } : exp
-      );
-      handleChange('experience', updatedExp);
-  };
-
-  const handleProjectChange = (id: string, field: keyof ProjectItem, value: any) => {
-      const updatedProjects = (localResume.projects || []).map(proj => 
-        proj.id === id ? { ...proj, [field]: value } : proj
-      );
-      handleChange('projects', updatedProjects);
-  };
-
-  const toggleProjectVisibility = (id: string) => {
-      const updatedProjects = (localResume.projects || []).map(proj => 
-        proj.id === id ? { ...proj, visible: proj.visible === false ? true : false } : proj
-      );
-      handleChange('projects', updatedProjects);
-  };
-
-  const handleAddProject = () => {
-      const newProject: ProjectItem = {
-          id: `proj-${Date.now()}`,
-          name: 'New Project',
-          description: 'Description of the project...',
-          visible: true
-      };
-      handleChange('projects', [...(localResume.projects || []), newProject]);
-  };
-
-  const handleDeleteProject = (id: string) => {
-      handleChange('projects', (localResume.projects || []).filter(p => p.id !== id));
-  };
-
-  const handleCertificationChange = (id: string, field: keyof CertificationItem, value: any) => {
-      const updatedCerts = (localResume.certifications || []).map(cert => 
-        cert.id === id ? { ...cert, [field]: value } : cert
-      );
-      handleChange('certifications', updatedCerts);
-  }
-
-  const toggleCertificationVisibility = (id: string) => {
-      const updatedCerts = (localResume.certifications || []).map(cert => 
-        cert.id === id ? { ...cert, visible: cert.visible === false ? true : false } : cert
-      );
-      handleChange('certifications', updatedCerts);
-  }
-
-  const handleAddCertification = () => {
-      const newCert: CertificationItem = {
-          id: `cert-${Date.now()}`,
-          name: 'Scholarship / Award Name',
-          issuer: 'University / Organization',
-          date: '2024',
-          visible: true
-      };
-      handleChange('certifications', [...(localResume.certifications || []), newCert]);
-  }
-
-  const handleDeleteCertification = (id: string) => {
-      handleChange('certifications', (localResume.certifications || []).filter(c => c.id !== id));
-  }
-
-  const handlePublicationChange = (id: string, field: keyof PublicationItem, value: any) => {
-      const updatedPubs = (localResume.publications || []).map(pub => 
-        pub.id === id ? { ...pub, [field]: value } : pub
-      );
-      handleChange('publications', updatedPubs);
-  }
-
-  const togglePublicationVisibility = (id: string) => {
-      const updatedPubs = (localResume.publications || []).map(pub => 
-        pub.id === id ? { ...pub, visible: pub.visible === false ? true : false } : pub
-      );
-      handleChange('publications', updatedPubs);
-  }
-
-  const handleAddPublication = () => {
-      const newPub: PublicationItem = {
-          id: `pub-${Date.now()}`,
-          title: 'New Publication',
-          publisher: 'Publisher',
-          date: '2023',
-          visible: true
-      };
-      handleChange('publications', [...(localResume.publications || []), newPub]);
-  }
-
-  const handleDeletePublication = (id: string) => {
-      handleChange('publications', (localResume.publications || []).filter(p => p.id !== id));
-  }
-
-  const handleAffiliationChange = (id: string, field: keyof AffiliationItem, value: any) => {
-      const updatedAffs = (localResume.affiliations || []).map(aff => 
-        aff.id === id ? { ...aff, [field]: value } : aff
-      );
-      handleChange('affiliations', updatedAffs);
-  }
-
-  const toggleAffiliationVisibility = (id: string) => {
-      const updatedAffs = (localResume.affiliations || []).map(aff => 
-        aff.id === id ? { ...aff, visible: aff.visible === false ? true : false } : aff
-      );
-      handleChange('affiliations', updatedAffs);
-  }
-
-  const handleAddAffiliation = () => {
-      const newAff: AffiliationItem = {
-          id: `aff-${Date.now()}`,
-          organization: 'Organization',
-          role: 'Member',
-          period: '2023 - Present',
-          visible: true
-      };
-      handleChange('affiliations', [...(localResume.affiliations || []), newAff]);
-  }
-
-  const handleDeleteAffiliation = (id: string) => {
-      handleChange('affiliations', (localResume.affiliations || []).filter(a => a.id !== id));
-  }
-
-  const handleBulletChange = (expId: string, bulletId: string, text: string) => {
-    const updatedExp = localResume.experience.map(exp => {
-      if (exp.id === expId) {
-        const newBullets = exp.bullets.map(b => b.id === bulletId ? { ...b, text } : b);
-        return { ...exp, bullets: newBullets };
+  // --- AI MAGIC HANDLER ---
+  const handleSmartImprove = async (text: string, context: string, onApply: (newText: string) => void) => {
+      if (!text.trim()) return;
+      setImprovingFieldId(context); 
+      try {
+          const result = await getInlineSuggestion(text, "Professional Resume Bullet Point");
+          if(result && result.suggestion) onApply(result.suggestion);
+      } catch (e) {
+          console.error("AI Improve failed", e);
+      } finally {
+          setImprovingFieldId(null);
       }
-      return exp;
-    });
-    handleChange('experience', updatedExp);
   };
 
-  const toggleBulletVisibility = (expId: string, bulletId: string) => {
-    const updatedExp = localResume.experience.map(exp => {
-      if (exp.id === expId) {
-        const newBullets = exp.bullets.map(b => b.id === bulletId ? { ...b, visible: !b.visible } : b);
-        return { ...exp, bullets: newBullets };
-      }
-      return exp;
-    });
-    handleChange('experience', updatedExp);
+  // --- ARRAY HANDLERS ---
+  const handleAddItem = (section: keyof ResumeData, item: any) => {
+      handleChange(section, [...(localResume[section] as any[] || []), item]);
   };
-
-  const handleImproveBullet = async (expId: string, bulletId: string, currentText: string) => {
-    if (!job) return;
-    setImprovingId(bulletId);
-    try {
-      const improved = await improveBulletPoint(currentText, job);
-      handleBulletChange(expId, bulletId, improved);
-    } finally {
-      setImprovingId(null);
-    }
+  const handleRemoveItem = (section: keyof ResumeData, index: number) => {
+      handleChange(section, (localResume[section] as any[] || []).filter((_, i) => i !== index));
   };
-
-  const handleImproveSummary = async () => {
-    if (!localResume.summary) return;
-    setImprovingSummary(true);
-    try {
-        const prompt = "Rewrite this professional summary to be more persuasive, impactful, and metric-driven. Use strong action verbs and highlight key achievements.";
-        const updated = await updateResumeWithAI(localResume, prompt);
-        handleChange('summary', updated.summary);
-    } catch (e) {
-        console.error(e);
-    } finally {
-        setImprovingSummary(false);
-    }
+  const handleUpdateItem = (section: keyof ResumeData, index: number, field: string, value: any) => {
+      const updated = (localResume[section] as any[]).map((item, i) => i === index ? { ...item, [field]: value } : item);
+      handleChange(section, updated);
+  };
+  
+  const addExperience = () => handleAddItem('experience', { id: `exp-${Date.now()}`, role: 'Role Title', company: 'Company Name', period: 'Jan 2023 - Present', bullets: [{id: `b-${Date.now()}`, text: 'Describe your impact...', visible: true}], visible: true });
+  const addProject = () => handleAddItem('projects', { id: `p-${Date.now()}`, name: 'Project Name', description: 'What did you build?', link: '', visible: true });
+  const addCertification = () => handleAddItem('certifications', { id: `cert-${Date.now()}`, name: 'Certification Name', issuer: 'Issuer', date: 'Year', visible: true });
+  
+  // Helper to calculate simple impact score for visual bar
+  const calculateImpact = (text: string) => {
+      const hasMetrics = /\d+%|\$\d+|\d+x/.test(text);
+      const length = text.length;
+      if (length < 20) return 10;
+      if (!hasMetrics) return 40;
+      return Math.min(100, 60 + (length > 100 ? 20 : 0) + (text.match(/\d/g)?.length || 0) * 2);
   };
 
   return (
-    <div className="bg-devops-800 rounded-xl border border-devops-700 shadow-xl overflow-hidden flex flex-col h-full">
-      <div className="bg-devops-900/50 p-2 sm:p-4 border-b border-devops-700 flex flex-col sm:flex-row justify-between items-center gap-3 sticky top-0 z-10">
-        <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-start">
-           <div>
-               <h2 className="text-base sm:text-lg font-semibold text-white">Editor</h2>
-               <span className={`text-[10px] px-2 py-0.5 rounded-full border ${
-                 localResume.style === 'Technical' ? 'border-blue-500/30 bg-blue-500/10 text-blue-400' :
-                 localResume.style === 'Leadership' ? 'border-purple-500/30 bg-purple-500/10 text-purple-400' :
-                 'border-green-500/30 bg-green-500/10 text-green-400'
-               }`}>
-                 {localResume.style}
-               </span>
-           </div>
-           
-           {/* Undo / Redo Controls */}
-           <div className="flex items-center gap-1 bg-devops-800 rounded-lg p-1 border border-devops-700 ml-4">
-               <button 
-                   onClick={undo} 
-                   disabled={!canUndo}
-                   className="p-1.5 rounded hover:bg-devops-700 disabled:opacity-30 disabled:hover:bg-transparent text-devops-300 transition-colors"
-               >
-                   <Undo2 className="w-4 h-4" />
-               </button>
-               <div className="w-px h-4 bg-devops-700"></div>
-               <button 
-                   onClick={redo} 
-                   disabled={!canRedo}
-                   className="p-1.5 rounded hover:bg-devops-700 disabled:opacity-30 disabled:hover:bg-transparent text-devops-300 transition-colors"
-               >
-                   <Redo2 className="w-4 h-4" />
-               </button>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full relative" ref={editorRef}>
+      
+      {/* --- TOOLBAR --- */}
+      <div className="bg-white px-6 py-3 border-b border-slate-200 flex justify-between items-center sticky top-0 z-20 backdrop-blur-sm bg-white/90">
+        <div className="flex items-center gap-4">
+           <h2 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2 uppercase">
+               <Briefcase className="w-4 h-4 text-hunj-600" /> Editor
+           </h2>
+           <div className="h-4 w-px bg-slate-200"></div>
+           <div className="flex items-center gap-1 bg-slate-50 rounded-lg p-0.5 border border-slate-200">
+               <button onClick={undo} disabled={!canUndo} className="p-1.5 rounded-md hover:bg-white hover:shadow-sm disabled:opacity-30 text-slate-500 hover:text-slate-900 transition-all"><Undo2 className="w-3.5 h-3.5" /></button>
+               <button onClick={redo} disabled={!canRedo} className="p-1.5 rounded-md hover:bg-white hover:shadow-sm disabled:opacity-30 text-slate-500 hover:text-slate-900 transition-all"><Redo2 className="w-3.5 h-3.5" /></button>
            </div>
         </div>
-
-        <div className="flex gap-2 w-full sm:w-auto">
-            <button 
-                onClick={() => {
-                    if(confirm("Revert all unsaved changes to this version?")) reset(resume);
-                }}
-                className="p-2 hover:bg-devops-700 rounded-lg text-devops-400 transition-colors bg-devops-800 border border-devops-700" 
-                title="Discard Changes"
-            >
-                <RotateCcw className="w-4 h-4" />
-            </button>
-            <button 
-                onClick={() => onUpdate(localResume)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-1.5 bg-success text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors shadow-sm"
-            >
-                <Save className="w-4 h-4" /> Save
-            </button>
+        <div className="flex items-center gap-2 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+            {job ? `Target: ${job.company}` : 'Master Profile'}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-6 sm:space-y-8">
+      {/* --- SCROLLABLE CONTENT --- */}
+      <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-slate-50/50">
         
-        {/* Personal Details */}
-        <div className="space-y-4">
-             <h3 className="text-md font-medium text-white border-b border-devops-700 pb-2">Personal Information</h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-                <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">Full Name</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.fullName}
-                        onChange={(e) => handleChange('fullName', e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">Role Title</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.role}
-                        onChange={(e) => handleChange('role', e.target.value)}
-                        placeholder="e.g. Cloud DevOps Engineer"
-                    />
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">Email</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.email}
-                        onChange={(e) => handleChange('email', e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">Phone</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.phone}
-                        onChange={(e) => handleChange('phone', e.target.value)}
-                    />
-                </div>
-                <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">Location</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.location}
-                        onChange={(e) => handleChange('location', e.target.value)}
-                    />
-                </div>
-                 <div className="space-y-1 sm:space-y-2">
-                    <label className="block text-xs sm:text-sm font-medium text-devops-300">LinkedIn URL</label>
-                    <input 
-                        className="w-full bg-devops-900 border border-devops-700 rounded-lg p-2.5 sm:p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                        value={localResume.linkedin}
-                        onChange={(e) => handleChange('linkedin', e.target.value)}
-                        placeholder="https://linkedin.com/in/..."
-                    />
+        {/* Personal Info - Collapsed Style */}
+        <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm group focus-within:border-hunj-500/50 transition-colors">
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                Header Details
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <InputGroup label="Full Name" value={localResume.fullName} onChange={(v) => handleChange('fullName', v)} />
+                <InputGroup label="Current Role" value={localResume.role} onChange={(v) => handleChange('role', v)} />
+                <InputGroup label="Location" value={localResume.location} onChange={(v) => handleChange('location', v)} />
+                <div className="md:col-span-3 grid grid-cols-3 gap-4">
+                    <InputGroup label="Email" value={localResume.email} onChange={(v) => handleChange('email', v)} />
+                    <InputGroup label="Phone" value={localResume.phone} onChange={(v) => handleChange('phone', v)} />
+                    <InputGroup label="LinkedIn" value={localResume.linkedin} onChange={(v) => handleChange('linkedin', v)} />
                 </div>
             </div>
-        </div>
+        </section>
 
-        {/* Header Section */}
-        <div className={`space-y-4 relative group transition-opacity ${localResume.summaryVisible === false ? 'opacity-60' : ''}`}>
-          <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleChange('summaryVisible', !localResume.summaryVisible)}
-                    className={`p-1 rounded ${localResume.summaryVisible === false ? 'text-devops-500' : 'text-accent-400'}`}
-                    title={localResume.summaryVisible === false ? "Show Section" : "Hide Section"}
-                  >
-                      {localResume.summaryVisible === false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                  <label className="block text-sm font-medium text-devops-300">Professional Summary</label>
-              </div>
-              <button 
-                  onClick={handleImproveSummary}
-                  disabled={improvingSummary}
-                  className="flex items-center gap-1 text-xs text-accent-400 hover:text-white transition-colors bg-accent-600/10 px-2 py-1 rounded hover:bg-accent-600/50"
-                  title="Enhance with AI"
-              >
-                  {improvingSummary ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                  Magic Rewrite
-              </button>
-          </div>
-          <textarea 
-            className="w-full h-32 bg-devops-900 border border-devops-700 rounded-lg p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-            value={localResume.summary}
-            onChange={(e) => handleChange('summary', e.target.value)}
-          />
-        </div>
-
-        {/* Experience Section */}
-        <div className="space-y-6">
-          <h3 className="text-md font-medium text-white border-b border-devops-700 pb-2">Experience</h3>
-          {localResume.experience.map((exp) => (
-            <div key={exp.id} className={`bg-devops-900/30 p-3 sm:p-4 rounded-lg border transition-all ${exp.visible === false ? 'border-devops-800 opacity-50' : 'border-devops-700/50'}`}>
-              <div className="flex justify-between items-center mb-3">
-                  <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => toggleExperienceVisibility(exp.id)}
-                        className={`p-1 rounded ${exp.visible === false ? 'text-devops-600' : 'text-accent-400'}`}
-                        title={exp.visible === false ? "Show in resume" : "Hide from resume"}
-                      >
-                          {exp.visible === false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                      <span className="text-xs text-devops-500 font-mono">{exp.visible === false ? 'Hidden' : 'Visible'}</span>
-                  </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-3">
-                 <input 
-                    className="bg-transparent border-b border-devops-700 text-white font-medium focus:border-accent-500 outline-none pb-1"
-                    value={exp.role}
-                    onChange={(e) => handleExperienceChange(exp.id, 'role', e.target.value)}
-                    placeholder="Role Title"
-                 />
-                 <input 
-                    className="bg-transparent border-b border-devops-700 text-devops-300 md:text-right focus:border-accent-500 outline-none pb-1"
-                    value={exp.company}
-                    onChange={(e) => handleExperienceChange(exp.id, 'company', e.target.value)}
-                    placeholder="Company Name"
-                 />
-              </div>
-              
-              <div className="space-y-3 mt-4">
-                {exp.bullets.map((bullet) => (
-                  <div key={bullet.id} className={`flex gap-2 group relative transition-opacity ${bullet.visible === false ? 'opacity-50' : ''}`}>
-                    <button 
-                        onClick={() => toggleBulletVisibility(exp.id, bullet.id)}
-                        className={`mt-2 p-0.5 rounded h-fit hover:bg-devops-800 ${bullet.visible === false ? 'text-devops-600' : 'text-devops-400'}`}
-                        title={bullet.visible === false ? "Show bullet" : "Hide bullet"}
-                    >
-                        {bullet.visible === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                    </button>
-                    <span className="text-devops-500 mt-2">•</span>
-                    <div className="flex-1 relative">
-                        <textarea 
-                            className="w-full bg-transparent text-sm text-devops-200 resize-none overflow-hidden focus:bg-devops-900/50 rounded p-1 outline-none focus:ring-1 focus:ring-devops-600"
-                            rows={Math.max(2, Math.ceil(bullet.text.length / 80))}
-                            value={bullet.text}
-                            onChange={(e) => handleBulletChange(exp.id, bullet.id, e.target.value)}
-                        />
-                         {job && (
-                            <button 
-                                onClick={() => handleImproveBullet(exp.id, bullet.id, bullet.text)}
-                                disabled={improvingId === bullet.id}
-                                className={`absolute right-2 top-2 p-1.5 bg-devops-800 rounded-md border border-devops-600 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity hover:bg-accent-600 hover:text-white ${improvingId === bullet.id ? 'opacity-100' : ''}`}
-                                title="Improve with AI"
-                            >
-                                <Wand2 className={`w-3 h-3 ${improvingId === bullet.id ? 'animate-spin' : ''}`} />
-                            </button>
-                        )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-        
-        {/* Projects Section */}
-        <div className="space-y-6">
-            <div className="flex justify-between items-center border-b border-devops-700 pb-2">
-                <h3 className="text-md font-medium text-white">Selected Projects</h3>
+        {/* Summary */}
+        <section className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm focus-within:border-hunj-500/50 transition-colors relative group">
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    Professional Summary
+                </h3>
                 <button 
-                    onClick={handleAddProject}
-                    className="flex items-center gap-1 text-xs text-accent-400 hover:text-accent-300"
+                    onClick={() => handleSmartImprove(localResume.summary, 'summary', (v) => handleChange('summary', v))}
+                    disabled={improvingFieldId === 'summary'}
+                    className="text-[10px] font-bold text-hunj-600 bg-hunj-50 px-2 py-1 rounded flex items-center gap-1.5 hover:bg-hunj-100 transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
                 >
-                    <Plus className="w-3 h-3" /> Add
+                    {improvingFieldId === 'summary' ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                    Enhance
                 </button>
+             </div>
+             <textarea 
+                className="w-full h-28 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700 focus:ring-2 focus:ring-hunj-500/20 focus:border-hunj-500 outline-none transition-all leading-relaxed resize-none placeholder-slate-400"
+                value={localResume.summary}
+                onChange={(e) => handleChange('summary', e.target.value)}
+                placeholder="Briefly describe your experience and career goals..."
+             />
+        </section>
+
+        {/* Experience */}
+        <section className="space-y-4">
+            <div className="flex justify-between items-center px-1">
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    Experience
+                </h3>
+                <button onClick={addExperience} className="text-[10px] font-bold text-hunj-600 hover:bg-hunj-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border border-transparent hover:border-hunj-100"><Plus className="w-3 h-3"/> Add Role</button>
             </div>
-            
-            {(localResume.projects || []).map((proj) => (
-                <div key={proj.id} className={`bg-devops-900/30 p-4 rounded-lg border transition-all relative group ${proj.visible === false ? 'border-devops-800 opacity-50' : 'border-devops-700/50'}`}>
-                    <div className="absolute top-2 right-2 flex gap-2">
-                        <button 
-                            onClick={() => toggleProjectVisibility(proj.id)}
-                            className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity ${proj.visible === false ? 'text-devops-600' : 'text-devops-400 hover:text-white'}`}
-                        >
-                            {proj.visible === false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                        <button 
-                            onClick={() => handleDeleteProject(proj.id)}
-                            className="text-devops-600 hover:text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+            {localResume.experience.map((exp, idx) => (
+                <div key={exp.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all relative group">
+                    <button onClick={() => handleRemoveItem('experience', idx)} className="absolute top-4 right-4 p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-4 h-4"/></button>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pr-10">
+                        <InputGroup label="Job Title" value={exp.role} onChange={(v) => handleUpdateItem('experience', idx, 'role', v)} bold />
+                        <InputGroup label="Company" value={exp.company} onChange={(v) => handleUpdateItem('experience', idx, 'company', v)} />
+                        <InputGroup label="Dates" value={exp.period} onChange={(v) => handleUpdateItem('experience', idx, 'period', v)} />
                     </div>
-                    <div className="space-y-3">
-                         <div className="space-y-1">
-                            <label className="text-xs text-devops-400">Project Name</label>
-                            <input 
-                                className="w-full bg-transparent border-b border-devops-700 text-white font-medium focus:border-accent-500 outline-none pb-1"
-                                value={proj.name}
-                                onChange={(e) => handleProjectChange(proj.id, 'name', e.target.value)}
-                            />
-                         </div>
-                         <div className="space-y-1">
-                            <label className="text-xs text-devops-400">Description</label>
-                            <textarea 
-                                className="w-full bg-transparent text-sm text-devops-200 resize-none focus:bg-devops-900/50 rounded p-1 outline-none focus:ring-1 focus:ring-devops-600"
-                                rows={3}
-                                value={proj.description}
-                                onChange={(e) => handleProjectChange(proj.id, 'description', e.target.value)}
-                            />
-                         </div>
+
+                    <div className="space-y-3 pl-4 border-l-2 border-slate-100">
+                        {exp.bullets.map((bullet, bIdx) => {
+                            const impact = calculateImpact(bullet.text);
+                            const impactColor = impact > 70 ? 'bg-green-500' : impact > 40 ? 'bg-yellow-500' : 'bg-slate-300';
+                            
+                            return (
+                                <div key={bullet.id} className="relative group/bullet">
+                                    <div className="absolute left-[-22px] top-3 w-1.5 h-1.5 rounded-full bg-slate-300 group-hover/bullet:bg-hunj-400 transition-colors"></div>
+                                    <textarea 
+                                        className="w-full bg-transparent text-sm text-slate-700 leading-relaxed resize-none overflow-hidden focus:bg-slate-50 rounded p-2 outline-none focus:ring-1 focus:ring-hunj-500/30 transition-all border border-transparent focus:border-slate-200"
+                                        rows={Math.max(1, Math.ceil(bullet.text.length / 90))}
+                                        value={bullet.text}
+                                        onChange={(e) => {
+                                            const newBullets = [...exp.bullets];
+                                            newBullets[bIdx] = { ...bullet, text: e.target.value };
+                                            handleUpdateItem('experience', idx, 'bullets', newBullets);
+                                        }}
+                                    />
+                                    
+                                    {/* Smart Bullet Controls */}
+                                    <div className="flex items-center gap-2 mt-1 opacity-0 group-hover/bullet:opacity-100 transition-opacity pl-2">
+                                        {/* Impact Bar */}
+                                        <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5" title="Impact Score">
+                                            <Zap className="w-3 h-3 text-slate-400" />
+                                            <div className="w-10 h-1 bg-slate-200 rounded-full overflow-hidden">
+                                                <div className={`h-full ${impactColor}`} style={{width: `${impact}%`}}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex-1"></div>
+
+                                        <button 
+                                            onClick={() => handleSmartImprove(bullet.text, bullet.id, (v) => {
+                                                const newBullets = [...exp.bullets];
+                                                newBullets[bIdx] = { ...bullet, text: v };
+                                                handleUpdateItem('experience', idx, 'bullets', newBullets);
+                                            })}
+                                            disabled={improvingFieldId === bullet.id}
+                                            className="text-[10px] font-bold text-hunj-600 hover:bg-hunj-50 px-2 py-1 rounded flex items-center gap-1"
+                                        >
+                                            {improvingFieldId === bullet.id ? <Loader2 className="w-3 h-3 animate-spin"/> : <Wand2 className="w-3 h-3"/>}
+                                            Improve
+                                        </button>
+                                        <button 
+                                            onClick={() => {
+                                                const newBullets = exp.bullets.filter((_, i) => i !== bIdx);
+                                                handleUpdateItem('experience', idx, 'bullets', newBullets);
+                                            }}
+                                            className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <button 
+                            onClick={() => {
+                                const newBullets = [...exp.bullets, { id: `b-${Date.now()}`, text: '', visible: true }];
+                                handleUpdateItem('experience', idx, 'bullets', newBullets);
+                            }}
+                            className="text-[10px] font-bold text-slate-400 hover:text-hunj-600 mt-2 px-2 flex items-center gap-1 transition-colors"
+                        >
+                            <Plus className="w-3 h-3" /> Add Achievement
+                        </button>
                     </div>
                 </div>
             ))}
-        </div>
+        </section>
 
-        {/* Other Sections (Certifications, Publications, Affiliations) would follow similar optimized structure */}
-        
-        {/* Sidebar Sections */}
-        <div className="space-y-6">
-            <h3 className="text-md font-medium text-white border-b border-devops-700 pb-2">Additional Sections</h3>
-            
+        {/* Projects */}
+        <section className="space-y-4">
+            <div className="flex justify-between items-center px-1">
+                <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    Projects
+                </h3>
+                <button onClick={addProject} className="text-[10px] font-bold text-hunj-600 hover:bg-hunj-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 border border-transparent hover:border-hunj-100"><Plus className="w-3 h-3"/> Add</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {localResume.projects.map((proj, idx) => (
+                    <div key={proj.id} className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 transition-all relative group">
+                        <button onClick={() => handleRemoveItem('projects', idx)} className="absolute top-2 right-2 p-1.5 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3"/></button>
+                        <div className="space-y-3">
+                            <input className="w-full font-bold text-slate-900 border-b border-transparent hover:border-slate-200 focus:border-hunj-500 focus:outline-none bg-transparent transition-colors placeholder-slate-400" placeholder="Project Name" value={proj.name} onChange={(e) => handleUpdateItem('projects', idx, 'name', e.target.value)} />
+                            <textarea className="w-full text-xs text-slate-600 bg-slate-50 rounded-lg p-2 focus:bg-white focus:ring-1 focus:ring-hunj-500/30 outline-none resize-none border border-slate-100 focus:border-slate-300" rows={3} placeholder="Description..." value={proj.description} onChange={(e) => handleUpdateItem('projects', idx, 'description', e.target.value)} />
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </section>
+
+        {/* Credentials & Extras */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-8">
+            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                Credentials & Additional Info
+            </h3>
+
+            {/* Education */}
             <div className="space-y-2">
-                <label className="block text-sm font-medium text-devops-300">Skills (Comma separated)</label>
-                <textarea
-                    className="w-full h-20 bg-devops-900 border border-devops-700 rounded-lg p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                    value={localResume.skills.join(', ')}
-                    onChange={(e) => handleArrayChange('skills', e.target.value)}
+                <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><GraduationCap className="w-3 h-3"/> Education</label>
+                <textarea 
+                    className="w-full h-20 bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-900 focus:ring-2 focus:ring-hunj-500/20 focus:border-hunj-500 outline-none transition-all leading-relaxed resize-none placeholder-slate-400"
+                    value={localResume.education}
+                    onChange={(e) => handleChange('education', e.target.value)}
+                    placeholder="BS Computer Science, University of Technology, 2020"
                 />
             </div>
 
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-devops-300">Languages (Comma separated)</label>
-                <input
-                    className="w-full bg-devops-900 border border-devops-700 rounded-lg p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                    value={localResume.languages?.join(', ') || ''}
-                    onChange={(e) => handleArrayChange('languages', e.target.value)}
-                />
+            {/* Certifications */}
+            <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Medal className="w-3 h-3"/> Certifications</label>
+                    <button onClick={addCertification} className="text-[10px] text-hunj-600 font-bold hover:bg-hunj-50 px-2 py-1 rounded border border-transparent hover:border-hunj-100">+ Add</button>
+                </div>
+                {localResume.certifications.map((cert, idx) => (
+                    <div key={cert.id} className="flex gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 group relative">
+                        <input className="bg-transparent text-xs font-bold w-1/3 outline-none border-b border-transparent focus:border-slate-300" placeholder="Name" value={cert.name} onChange={(e) => handleUpdateItem('certifications', idx, 'name', e.target.value)} />
+                        <input className="bg-transparent text-xs text-slate-600 w-1/3 outline-none border-b border-transparent focus:border-slate-300" placeholder="Issuer" value={cert.issuer} onChange={(e) => handleUpdateItem('certifications', idx, 'issuer', e.target.value)} />
+                        <input className="bg-transparent text-xs text-slate-500 w-1/4 outline-none border-b border-transparent focus:border-slate-300" placeholder="Date" value={cert.date} onChange={(e) => handleUpdateItem('certifications', idx, 'date', e.target.value)} />
+                        <button onClick={() => handleRemoveItem('certifications', idx)} className="ml-auto text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 className="w-3 h-3"/></button>
+                    </div>
+                ))}
             </div>
 
-            <div className="space-y-2">
-                <label className="block text-sm font-medium text-devops-300">Achievements (Comma separated)</label>
-                <textarea
-                    className="w-full h-20 bg-devops-900 border border-devops-700 rounded-lg p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                    value={localResume.achievements?.join(', ') || ''}
-                    onChange={(e) => handleArrayChange('achievements', e.target.value)}
-                />
-            </div>
-        </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Skills */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Zap className="w-3 h-3"/> Skills</label>
+                        <button onClick={() => handleAddItem('skills', 'New Skill')} className="text-[10px] text-hunj-600 font-bold hover:bg-hunj-50 px-2 py-1 rounded border border-transparent hover:border-hunj-100">+ Add</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {localResume.skills.map((skill, i) => (
+                            <SimpleTag 
+                                key={i} 
+                                text={skill} 
+                                onChange={(v) => {
+                                    const newSkills = [...localResume.skills];
+                                    newSkills[i] = v;
+                                    handleChange('skills', newSkills);
+                                }}
+                                onDelete={() => handleRemoveItem('skills', i)}
+                            />
+                        ))}
+                    </div>
+                </div>
 
-        {/* Education Section */}
-        <div className={`space-y-4 transition-opacity ${localResume.educationVisible === false ? 'opacity-60' : ''}`}>
-            <div className="flex items-center gap-2 border-b border-devops-700 pb-2">
-                <button 
-                    onClick={() => handleChange('educationVisible', !localResume.educationVisible)}
-                    className={`p-1 rounded ${localResume.educationVisible === false ? 'text-devops-500' : 'text-accent-400'}`}
-                    title={localResume.educationVisible === false ? "Show Section" : "Hide Section"}
-                >
-                    {localResume.educationVisible === false ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-                <h3 className="text-md font-medium text-white">Education</h3>
+                {/* Languages */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Globe className="w-3 h-3"/> Languages</label>
+                        <button onClick={() => handleAddItem('languages', 'New Language')} className="text-[10px] text-hunj-600 font-bold hover:bg-hunj-50 px-2 py-1 rounded border border-transparent hover:border-hunj-100">+ Add</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {localResume.languages.map((lang, i) => (
+                            <SimpleTag 
+                                key={i} 
+                                text={lang} 
+                                onChange={(v) => {
+                                    const newLangs = [...localResume.languages];
+                                    newLangs[i] = v;
+                                    handleChange('languages', newLangs);
+                                }}
+                                onDelete={() => handleRemoveItem('languages', i)}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Awards */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Award className="w-3 h-3"/> Awards</label>
+                        <button onClick={() => handleAddItem('awards', 'New Award')} className="text-[10px] text-hunj-600 font-bold hover:bg-hunj-50 px-2 py-1 rounded border border-transparent hover:border-hunj-100">+ Add</button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        {localResume.awards && localResume.awards.map((award, i) => (
+                            <SimpleInputRow 
+                                key={i} 
+                                text={award} 
+                                onChange={(v) => {
+                                    const newAwards = [...(localResume.awards || [])];
+                                    newAwards[i] = v;
+                                    handleChange('awards', newAwards);
+                                }}
+                                onDelete={() => {
+                                    const newAwards = (localResume.awards || []).filter((_, idx) => idx !== i);
+                                    handleChange('awards', newAwards);
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Hobbies / Interests */}
+                <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><BookOpen className="w-3 h-3"/> Hobbies / Interests</label>
+                        <button onClick={() => handleAddItem('interests', 'New Interest')} className="text-[10px] text-hunj-600 font-bold hover:bg-hunj-50 px-2 py-1 rounded border border-transparent hover:border-hunj-100">+ Add</button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        {localResume.interests.map((interest, i) => (
+                            <SimpleTag 
+                                key={i} 
+                                text={interest} 
+                                onChange={(v) => {
+                                    const newInterests = [...localResume.interests];
+                                    newInterests[i] = v;
+                                    handleChange('interests', newInterests);
+                                }}
+                                onDelete={() => handleRemoveItem('interests', i)}
+                            />
+                        ))}
+                    </div>
+                </div>
             </div>
-            <textarea
-                className="w-full h-32 bg-devops-900 border border-devops-700 rounded-lg p-3 text-sm text-devops-100 focus:ring-2 focus:ring-accent-500 outline-none"
-                value={localResume.education}
-                onChange={(e) => handleChange('education', e.target.value)}
-                placeholder="Degree, University, Year..."
-            />
         </div>
 
       </div>
     </div>
   );
 };
+
+// UI Helpers
+interface InputGroupProps {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    bold?: boolean;
+}
+
+const InputGroup: React.FC<InputGroupProps> = ({ label, value, onChange, bold }) => (
+    <div className="space-y-1">
+        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</label>
+        <input 
+            className={`w-full bg-slate-50 border-b border-slate-200 focus:border-hunj-500 rounded-t-lg px-3 py-2 outline-none transition-all text-sm text-slate-900 focus:bg-white ${bold ? 'font-bold' : ''}`}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+        />
+    </div>
+);
+
+interface SimpleTagProps {
+    text: string;
+    onChange: (v: string) => void;
+    onDelete: () => void;
+}
+
+const SimpleTag: React.FC<SimpleTagProps> = ({ text, onChange, onDelete }) => (
+    <div className="flex items-center bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 transition-colors group">
+        <Tag className="w-3 h-3 text-slate-400 mr-1.5" />
+        <input 
+            className="bg-transparent text-xs font-bold text-slate-700 w-auto min-w-[60px] max-w-[150px] outline-none" 
+            value={text} 
+            onChange={(e) => onChange(e.target.value)}
+        />
+        <button onClick={onDelete} className="ml-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+    </div>
+);
+
+interface SimpleInputRowProps {
+    text: string;
+    onChange: (v: string) => void;
+    onDelete: () => void;
+}
+
+const SimpleInputRow: React.FC<SimpleInputRowProps> = ({ text, onChange, onDelete }) => (
+    <div className="flex items-center bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 transition-colors group">
+        <input 
+            className="bg-transparent text-xs text-slate-700 w-full outline-none" 
+            value={text} 
+            onChange={(e) => onChange(e.target.value)}
+        />
+        <button onClick={onDelete} className="ml-2 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3"/></button>
+    </div>
+);
 
 export default ResumeEditor;

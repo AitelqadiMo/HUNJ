@@ -1,7 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { JobAnalysis, SalaryInsight } from '../types';
 import { analyzeSalary } from '../services/geminiService';
-import { DollarSign, TrendingUp, TrendingDown, Minus, Copy, Check, Loader2, MessageSquare } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Minus, Copy, Check, Loader2, MessageSquare, BarChart3 } from 'lucide-react';
 
 interface SalaryInsightsProps {
   job: JobAnalysis;
@@ -37,112 +38,110 @@ const SalaryInsights: React.FC<SalaryInsightsProps> = ({ job, insight, onUpdate 
       setTimeout(() => setCopied(null), 2000);
   };
 
+  const formatCurrency = (val: number, curr: string) => {
+      return new Intl.NumberFormat('en-US', { style: 'currency', currency: curr, maximumFractionDigits: 0 }).format(val);
+  };
+
   if (isLoading) {
       return (
-          <div className="h-full flex flex-col items-center justify-center text-devops-400">
-              <Loader2 className="w-10 h-10 animate-spin mb-4 text-accent-500" />
-              <p>Analyzing market data for {job.title}...</p>
+          <div className="h-full flex flex-col items-center justify-center text-devops-400 gap-4">
+              <Loader2 className="w-8 h-8 animate-spin text-green-500" />
+              <p className="text-sm font-medium">Accessing compensation database...</p>
           </div>
       );
   }
 
   if (!insight) return null;
 
-  const formatCurrency = (val: number, curr: string) => {
-      return new Intl.NumberFormat('en-US', { style: 'currency', currency: curr, maximumFractionDigits: 0 }).format(val);
-  };
-
   return (
-    <div className="h-full overflow-y-auto pr-2 pb-10">
-        <div className="bg-devops-800 rounded-xl border border-devops-700 p-6 mb-6">
-            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                <DollarSign className="w-6 h-6 text-green-500" />
-                Salary & Market Intelligence
-            </h2>
+    <div className="h-full overflow-y-auto pr-2 pb-10 custom-scrollbar">
+        <div className="space-y-6">
+            
+            {/* Header */}
+            <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-green-500/10 rounded-lg">
+                    <DollarSign className="w-6 h-6 text-green-500" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Compensation Intelligence</h2>
+            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                {/* Range Card */}
-                <div className="md:col-span-2 bg-devops-900/50 rounded-lg p-6 border border-devops-700 flex flex-col justify-center">
-                    <p className="text-sm text-devops-400 mb-2 uppercase tracking-wide">Estimated Annual Salary</p>
-                    <div className="flex items-end gap-2">
-                        <span className="text-4xl font-bold text-white">
+            {/* Main Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-devops-800 border border-devops-700 rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-2xl"></div>
+                    <p className="text-xs font-bold text-devops-400 uppercase tracking-widest mb-3">Estimated Range</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-3xl lg:text-4xl font-bold text-white tracking-tighter">
                             {formatCurrency(insight.estimatedRange.min, insight.estimatedRange.currency)}
                         </span>
-                        <span className="text-devops-500 text-2xl mb-1">-</span>
-                        <span className="text-4xl font-bold text-white">
+                        <span className="text-devops-600 text-2xl font-light">/</span>
+                        <span className="text-3xl lg:text-4xl font-bold text-white tracking-tighter">
                             {formatCurrency(insight.estimatedRange.max, insight.estimatedRange.currency)}
                         </span>
                     </div>
-                    <p className="text-xs text-devops-500 mt-2 italic">
-                        *Estimated based on {job.title} roles in {job.location || 'this market'}.
-                    </p>
+                    <p className="text-[10px] text-devops-500 mt-2">Base salary excl. equity/bonuses</p>
                 </div>
 
-                {/* Trend Card */}
-                <div className="bg-devops-900/50 rounded-lg p-6 border border-devops-700 flex flex-col items-center justify-center text-center">
-                    <p className="text-sm text-devops-400 mb-2 uppercase tracking-wide">Market Demand</p>
-                    {insight.marketTrend === 'High Demand' && <TrendingUp className="w-10 h-10 text-success mb-2" />}
-                    {insight.marketTrend === 'Stable' && <Minus className="w-10 h-10 text-warning mb-2" />}
-                    {insight.marketTrend === 'Low Demand' && <TrendingDown className="w-10 h-10 text-danger mb-2" />}
-                    <span className={`font-bold text-lg ${
-                        insight.marketTrend === 'High Demand' ? 'text-success' : 
-                        insight.marketTrend === 'Stable' ? 'text-warning' : 'text-danger'
+                <div className="bg-devops-800 border border-devops-700 rounded-2xl p-6 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <p className="text-xs font-bold text-devops-400 uppercase tracking-widest mb-3">Market Demand</p>
+                    <div className={`flex items-center gap-2 text-2xl font-bold mb-1 ${
+                        insight.marketTrend === 'High Demand' ? 'text-green-400' : 
+                        insight.marketTrend === 'Stable' ? 'text-yellow-400' : 'text-red-400'
                     }`}>
+                        {insight.marketTrend === 'High Demand' && <TrendingUp className="w-6 h-6" />}
+                        {insight.marketTrend === 'Stable' && <Minus className="w-6 h-6" />}
+                        {insight.marketTrend === 'Low Demand' && <TrendingDown className="w-6 h-6" />}
                         {insight.marketTrend}
-                    </span>
+                    </div>
+                    <p className="text-[10px] text-devops-500">Based on recent role volume</p>
                 </div>
             </div>
 
-            <div className="mb-6">
-                 <h3 className="text-sm font-bold text-white mb-2">Market Analysis</h3>
+            {/* Analysis */}
+            <div className="bg-devops-900/50 border border-devops-800 rounded-xl p-5">
+                 <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+                    <BarChart3 className="w-4 h-4 text-devops-400" /> Context
+                 </h3>
                  <p className="text-sm text-devops-300 leading-relaxed">{insight.reasoning}</p>
             </div>
 
-            <div className="mb-6">
-                <h3 className="text-sm font-bold text-white mb-2">Negotiation Strategy</h3>
-                <ul className="space-y-2">
+            {/* Negotiation */}
+            <div>
+                <h3 className="text-xs font-bold text-devops-400 uppercase tracking-widest mb-4">Leverage Points</h3>
+                <div className="space-y-2">
                     {insight.negotiationTips.map((tip, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-devops-200">
-                            <span className="text-accent-500 font-bold">•</span>
-                            {tip}
-                        </li>
+                        <div key={i} className="flex gap-3 bg-devops-800/50 p-3 rounded-xl border border-devops-700/50">
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 shrink-0"></div>
+                            <p className="text-sm text-devops-200">{tip}</p>
+                        </div>
                     ))}
-                </ul>
-            </div>
-        </div>
-
-        {/* Scripts Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-devops-800 rounded-xl border border-devops-700 p-6 relative group">
-                <div className="flex items-center gap-2 mb-4 text-devops-100">
-                    <MessageSquare className="w-4 h-4 text-accent-500" />
-                    <h3 className="font-bold text-sm uppercase">Screening Call Script</h3>
                 </div>
-                <div className="bg-devops-900 rounded p-4 text-sm text-devops-300 italic">
-                    "{insight.scripts.screening}"
-                </div>
-                <button 
-                    onClick={() => copyToClipboard(insight.scripts.screening, 'screening')}
-                    className="absolute top-4 right-4 p-2 text-devops-400 hover:text-white bg-devops-700/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                    {copied === 'screening' ? <Check className="w-4 h-4 text-success"/> : <Copy className="w-4 h-4"/>}
-                </button>
             </div>
 
-            <div className="bg-devops-800 rounded-xl border border-devops-700 p-6 relative group">
-                <div className="flex items-center gap-2 mb-4 text-devops-100">
-                    <MessageSquare className="w-4 h-4 text-accent-500" />
-                    <h3 className="font-bold text-sm uppercase">Counter-Offer Script</h3>
+            {/* Scripts */}
+            <div>
+                <h3 className="text-xs font-bold text-devops-400 uppercase tracking-widest mb-4">Verbal Scripts</h3>
+                <div className="grid grid-cols-1 gap-4">
+                    <div className="group relative bg-devops-900 border border-devops-700 rounded-xl p-5 hover:border-green-500/30 transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-sm font-bold text-white">Initial Screen</h4>
+                            <button onClick={() => copyToClipboard(insight.scripts.screening, 's1')} className="text-xs text-devops-400 hover:text-white flex items-center gap-1">
+                                {copied === 's1' ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy
+                            </button>
+                        </div>
+                        <p className="text-sm text-devops-300 italic font-serif">"{insight.scripts.screening}"</p>
+                    </div>
+                    
+                    <div className="group relative bg-devops-900 border border-devops-700 rounded-xl p-5 hover:border-green-500/30 transition-colors">
+                        <div className="flex justify-between items-center mb-2">
+                            <h4 className="text-sm font-bold text-white">Counter Offer</h4>
+                            <button onClick={() => copyToClipboard(insight.scripts.counterOffer, 's2')} className="text-xs text-devops-400 hover:text-white flex items-center gap-1">
+                                {copied === 's2' ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy
+                            </button>
+                        </div>
+                        <p className="text-sm text-devops-300 italic font-serif">"{insight.scripts.counterOffer}"</p>
+                    </div>
                 </div>
-                <div className="bg-devops-900 rounded p-4 text-sm text-devops-300 italic">
-                    "{insight.scripts.counterOffer}"
-                </div>
-                <button 
-                    onClick={() => copyToClipboard(insight.scripts.counterOffer, 'counter')}
-                    className="absolute top-4 right-4 p-2 text-devops-400 hover:text-white bg-devops-700/50 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                    {copied === 'counter' ? <Check className="w-4 h-4 text-success"/> : <Copy className="w-4 h-4"/>}
-                </button>
             </div>
         </div>
     </div>

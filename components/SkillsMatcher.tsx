@@ -1,6 +1,7 @@
+
 import React from 'react';
 import { SkillMatch } from '../types';
-import { Check, X, AlertTriangle } from 'lucide-react';
+import { Check, X, AlertTriangle, Layers, ArrowUpRight } from 'lucide-react';
 
 interface SkillsMatcherProps {
   matches: SkillMatch[];
@@ -8,54 +9,70 @@ interface SkillsMatcherProps {
 }
 
 const SkillsMatcher: React.FC<SkillsMatcherProps> = ({ matches, isLoading }) => {
-  if (isLoading) return <div className="text-sm text-devops-400 p-4">Analyzing skills gap...</div>;
+  if (isLoading) return <div className="text-xs text-devops-400 p-4 animate-pulse">Running gap analysis...</div>;
   if (!matches.length) return null;
 
-  const sortedMatches = [...matches].sort((a, b) => {
-    const order = { missing: 0, partial: 1, match: 2 };
-    return order[a.status] - order[b.status];
-  });
+  const acquired = matches.filter(m => m.status === 'match');
+  const missing = matches.filter(m => m.status === 'missing');
+  const partial = matches.filter(m => m.status === 'partial');
+  
+  const total = matches.length;
+  const score = Math.round(((acquired.length + (partial.length * 0.5)) / total) * 100);
 
   return (
-    <div className="bg-devops-800 border border-devops-700 rounded-xl p-6 mt-6">
-      <h3 className="text-lg font-semibold text-white mb-4">Smart Skills Matching</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-        {sortedMatches.map((m, idx) => {
-          let bgClass = '';
-          let icon = null;
-          
-          switch(m.status) {
-            case 'match':
-              bgClass = 'bg-green-500/10 border-green-500/30 text-green-400';
-              icon = <Check className="w-3 h-3" />;
-              break;
-            case 'partial':
-              bgClass = 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
-              icon = <AlertTriangle className="w-3 h-3" />;
-              break;
-            case 'missing':
-              bgClass = 'bg-red-500/10 border-red-500/30 text-red-400';
-              icon = <X className="w-3 h-3" />;
-              break;
-          }
-
-          return (
-            <div key={idx} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${bgClass} text-sm`}>
-              <span className="truncate mr-2 font-mono">{m.skill}</span>
-              <div className="flex-shrink-0">{icon}</div>
-            </div>
-          );
-        })}
+    <div className="bg-devops-800 border border-devops-700 rounded-xl p-5 mt-6">
+      <div className="flex justify-between items-center mb-4">
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Layers className="w-4 h-4 text-hunj-500" /> Skill Audit
+          </h3>
+          <span className={`text-sm font-bold ${score > 80 ? 'text-green-400' : score > 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {score}% Coverage
+          </span>
       </div>
-      
-      {matches.some(m => m.status === 'missing') && (
-        <div className="mt-4 p-3 bg-red-900/20 border border-red-900/50 rounded-lg">
-           <p className="text-xs text-red-300 font-medium mb-1">Critical Missing Skills:</p>
-           <p className="text-xs text-devops-400">
-             Consider adding specific projects or experience detailing: {matches.filter(m => m.status === 'missing').map(m => m.skill).join(', ')}.
-           </p>
-        </div>
-      )}
+
+      {/* Progress Bar */}
+      <div className="w-full h-1.5 bg-devops-950 rounded-full overflow-hidden mb-6 flex">
+          <div className="bg-green-500 h-full" style={{ width: `${(acquired.length / total) * 100}%` }}></div>
+          <div className="bg-yellow-500 h-full" style={{ width: `${(partial.length / total) * 100}%` }}></div>
+          <div className="bg-red-500/30 h-full flex-1"></div>
+      </div>
+
+      <div className="space-y-5">
+          {/* Acquired */}
+          {acquired.length > 0 && (
+              <div>
+                  <div className="text-[10px] text-devops-400 uppercase font-bold mb-2 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div> Acquired Assets
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                      {acquired.map((m, i) => (
+                          <span key={i} className="px-2 py-1 bg-green-500/10 border border-green-500/20 text-green-400 rounded text-[10px] font-bold flex items-center gap-1">
+                              {m.skill} <Check className="w-2.5 h-2.5" />
+                          </span>
+                      ))}
+                  </div>
+              </div>
+          )}
+
+          {/* Missing */}
+          {missing.length > 0 && (
+              <div>
+                  <div className="text-[10px] text-devops-400 uppercase font-bold mb-2 flex items-center gap-2">
+                      <div className="w-1.5 h-1.5 bg-red-500 rounded-full"></div> Critical Gaps
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                      {missing.map((m, i) => (
+                          <span key={i} className="px-2 py-1 bg-red-500/10 border border-red-500/20 text-red-400 rounded text-[10px] font-bold flex items-center gap-1 group cursor-help">
+                              {m.skill}
+                          </span>
+                      ))}
+                  </div>
+                  <p className="text-[10px] text-devops-500 mt-2 italic">
+                      Add experience with these keywords to boost ATS score by ~15%.
+                  </p>
+              </div>
+          )}
+      </div>
     </div>
   );
 };

@@ -15,29 +15,72 @@ export interface LogEntry {
   details?: any;
 }
 
-export interface JobAnalysis {
-  title: string;
-  company: string;
+// --- DETERMINISTIC DESIGN ENGINE TYPES ---
+export interface ThemeTokens {
+  primary: string;
+  secondary: string;
+  accent: string;
+  background: string;
+  surface: string;
+  text_main: string;
+  text_muted: string;
+  divider: string;
+}
+
+export interface TypographyTokens {
+  heading_family: string;
+  body_family: string;
+  base_size: string;
+  line_height: string;
+  heading_weight: string;
+  section_spacing: string;
+  item_spacing: string;
+}
+
+export interface DesignBlueprint {
+  layout_id: 'SingleColumn' | 'SidebarLeft' | 'SidebarRight' | 'Grid2x2';
+  tokens: ThemeTokens;
+  typography: TypographyTokens;
+  section_configs: Record<string, {
+    visible: boolean;
+    variant: 'Standard' | 'Compact' | 'Minimal';
+    grid_span?: number;
+  }>;
+  page_settings: {
+    format: 'A4' | 'Letter';
+    margins: string;
+    scaling: number;
+  };
+}
+// --- END DESIGN ENGINE TYPES ---
+
+export interface JobProfile {
+    id?: string;
+    title: string;
+    company: string;
+    requiredSkills: string[];
+    optionalSkills: string[];
+    industry: string;
+    seniorityLevel: string;
+    leadershipRequired: boolean;
+    keywords: string[];
+    summary: string;
+    rawText: string;
+}
+
+export interface JobAnalysis extends JobProfile {
   location?: string;
-  requiredSkills: string[];
-  keywords: string[];
   experienceLevel: string;
-  summary: string;
   hiringProbability: number;
   hiringReasoning: string;
   companyInsights: string;
-}
-
-export interface ResumeSection {
-  id: string;
-  title: string;
-  content: string;
 }
 
 export interface ExperienceBullet {
   id: string;
   text: string;
   visible: boolean;
+  impactScore?: number;
 }
 
 export interface ExperienceItem {
@@ -46,6 +89,7 @@ export interface ExperienceItem {
   role: string;
   company: string;
   period: string;
+  location?: string;
   bullets: ExperienceBullet[];
 }
 
@@ -54,6 +98,7 @@ export interface ProjectItem {
   visible?: boolean;
   name: string;
   description: string;
+  technologies?: string[];
   link?: string;
 }
 
@@ -66,38 +111,33 @@ export interface CertificationItem {
   link?: string;
 }
 
-export interface PublicationItem {
-  id: string;
-  visible?: boolean;
-  title: string;
-  publisher: string;
-  date: string;
-  link?: string;
+export interface SkillCategory {
+    name: string;
+    skills: string[];
 }
 
-export interface AffiliationItem {
-  id: string;
-  visible?: boolean;
-  organization: string;
-  role: string;
-  period: string;
-}
+export type ResumeLayout = 'Executive' | 'Minimalist' | 'Academic' | 'Creative' | 'ATS' | 'International';
 
 export interface ResumeThemeConfig {
-  template: 'Modern' | 'Classic' | 'Minimalist' | 'Tech' | 'Executive' | 'Creative' | 'Academic' | 'Swiss' | 'Serif';
-  font: 'Inter' | 'Merriweather' | 'Roboto' | 'JetBrains Mono' | 'Lora';
+  layout: ResumeLayout;
+  font: string;
   accentColor: string;
-  fontSize: 'small' | 'medium' | 'large';
-  spacing: 'compact' | 'normal' | 'comfortable';
+  pageSize: 'A4' | 'Letter';
+  density: 'Compact' | 'Standard' | 'Comfortable';
+  targetPageCount: 1 | 2 | 3;
 }
 
 export interface ResumeData {
   id: string;
   versionName?: string;
   timestamp?: number;
-  style: 'Base' | 'Technical' | 'Leadership' | 'Balanced';
-  design: string;
-  themeConfig: ResumeThemeConfig;
+  style: 'Base' | 'Technical' | 'Leadership' | 'Balanced'; 
+  design: string; 
+  themeConfig: ResumeThemeConfig; 
+  designBlueprint?: DesignBlueprint; // Unified state for the rendering engine
+  sectionOrder: string[]; 
+  visibleSections: Record<string, boolean>; 
+  
   fullName: string;
   role: string;
   contactInfo: string;
@@ -108,52 +148,61 @@ export interface ResumeData {
   website: string;
   summary: string;
   summaryVisible?: boolean;
+  
   skills: string[];
+  skillCategories?: SkillCategory[];
+  
   experience: ExperienceItem[];
   projects: ProjectItem[];
   certifications: CertificationItem[];
-  publications: PublicationItem[];
-  affiliations: AffiliationItem[];
   education: string;
   educationVisible?: boolean;
   languages: string[];
   achievements: string[];
+  awards: string[];
   interests: string[];
   strengths: string[];
+  
+  // Custom sections used by application
+  publications?: any[];
+  affiliations?: any[];
+  personalKnowledgeBase?: any[];
 }
 
 export interface ATSScore {
   total: number;
   breakdown: {
     keywords: number;
-    format: number;
+    impact: number;
     quantifiable: number;
-    verbs: number;
-    length: number;
-    skills: number;
+    format: number;
     structure: number;
   };
   suggestions: string[];
-}
-
-export interface BiasItem {
-  type: 'Gender' | 'Age' | 'Cliché' | 'Cultural';
-  text: string;
-  explanation: string;
-  suggestion: string;
-  severity: 'Low' | 'Medium' | 'High';
-}
-
-export interface BiasAnalysis {
-  riskScore: number;
-  overallAssessment: string;
-  items: BiasItem[];
 }
 
 export interface SkillMatch {
   skill: string;
   status: 'match' | 'partial' | 'missing';
   recommendation?: string;
+}
+
+export interface BiasItem {
+  type: string;
+  severity: string;
+  text: string;
+  suggestion: string;
+}
+
+export interface BiasAnalysis {
+  riskScore: number;
+  overallAssessment: string;
+  items: BiasItem[];
+  originalScore?: number;
+  blindScore?: number;
+  variance?: number;
+  reasoning?: string;
+  isBiased?: boolean;
 }
 
 export interface CoverLetter {
@@ -163,52 +212,99 @@ export interface CoverLetter {
 
 export interface InterviewMessage {
   id: string;
-  role: 'ai' | 'user';
+  role: 'user' | 'ai';
   content: string;
   feedback?: {
     rating: number;
     strengths: string[];
     improvements: string[];
-    sampleAnswer: string;
   };
 }
 
 export interface LinkedInProfile {
   headline: string;
   about: string;
-  featuredSkills: string[];
   experienceHooks: string[];
+  featuredSkills: string[];
 }
 
 export interface SalaryInsight {
-    estimatedRange: { min: number; max: number; currency: string };
-    marketTrend: 'High Demand' | 'Stable' | 'Low Demand';
-    reasoning: string;
-    negotiationTips: string[];
-    scripts: {
-        screening: string;
-        counterOffer: string;
-    };
-}
-
-export interface NetworkingTemplate {
-    type: 'Recruiter' | 'Peer Referral' | 'Alumni' | 'Hiring Manager';
-    subject: string;
-    body: string;
+  estimatedRange: {
+    min: number;
+    max: number;
+    currency: string;
+  };
+  marketTrend: 'High Demand' | 'Stable' | 'Low Demand';
+  reasoning: string;
+  negotiationTips: string[];
+  scripts: {
+    screening: string;
+    counterOffer: string;
+  };
 }
 
 export interface NetworkingStrategy {
-    targetRoles: string[];
-    outreachTemplates: NetworkingTemplate[];
+  targetRoles: string[];
+  outreachTemplates: {
+    type: string;
+    subject: string;
+    body: string;
+  }[];
 }
 
 export interface RecommendedJob {
-    id: string;
-    title: string;
-    company: string;
-    matchScore: number;
-    matchReason: string;
-    simulatedDescription: string;
+  id: string;
+  title: string;
+  company: string;
+  matchScore: number;
+  matchReason: string;
+  simulatedDescription: string;
+}
+
+export interface DocumentItem {
+  id: string;
+  name: string;
+  type: string;
+  format: string;
+  dateAdded: string;
+  size: string;
+  tags: string[];
+}
+
+export interface AchievementTag {
+  label: string;
+}
+
+export interface AchievementEntity {
+  id: string;
+  category: 'Technical' | 'Leadership' | 'Operational' | 'All';
+  originalText: string;
+  enhancedText?: string;
+  metrics: string[];
+  tags: AchievementTag[];
+  hidden?: boolean;
+}
+
+export interface RawDataSource {
+  id: string;
+  type: string;
+  name: string;
+  content: string;
+  dateAdded: number;
+  status: 'Processing' | 'Structured' | 'Error';
+  entityCount: number;
+}
+
+export interface ProbingQuestion {
+  question: string;
+  targetSkill: string;
+  reasoning: string;
+}
+
+export interface GeneratedAchievement {
+  improvedBullet: string;
+  suggestedSection: string;
+  relatedId?: string;
 }
 
 export interface ExternalJob {
@@ -216,49 +312,15 @@ export interface ExternalJob {
   title: string;
   company: string;
   location: string;
-  salaryRange?: string;
   description: string;
   requirements: string[];
-  visaSupport: boolean;
-  postedDate: string;
-  applyLink: string;
-  matchScore: number;
-  source: string; // e.g., "LinkedIn", "Company Site"
-  sourceUrl?: string; // The URL where info was found
-  tags: string[]; // AI generated tags e.g. "Urgent", "Remote"
-}
-
-export interface JobSearchFilters {
-    query: string;
-    location: string;
-    remote: 'All' | 'Remote' | 'Hybrid' | 'On-site';
-    datePosted: 'Any' | 'Past 24h' | 'Past Week' | 'Past Month';
-    level: 'Any' | 'Entry' | 'Mid' | 'Senior' | 'Lead';
-    type: 'Any' | 'Full-time' | 'Contract';
-}
-
-export interface MarketTrends {
-    summary: string;
-    salaryTrend: 'Up' | 'Down' | 'Stable';
-    topSkills: string[];
-    demandLevel: 'High' | 'Medium' | 'Low';
-}
-
-export interface CareerInsights {
-    missingSkills: string[];
-    marketOutlook: string;
-    resumeStrength: number;
-    recommendedAction: string;
-}
-
-export interface DocumentItem {
-  id: string;
-  name: string;
-  type: 'Resume' | 'Cover Letter' | 'Certificate' | 'Transcript' | 'Portfolio';
-  format: 'PDF' | 'DOCX' | 'TXT' | 'IMG';
-  dateAdded: string;
-  size: string;
   tags: string[];
+  matchScore: number;
+  salaryRange?: string;
+  visaSupport?: boolean;
+  postedDate?: string;
+  interviewProbability?: number;
+  missingSkills?: string[];
 }
 
 export interface UserPreferences {
@@ -273,24 +335,36 @@ export interface UserPreferences {
   companySize: string[];
 }
 
-export interface ProbingQuestion {
-  question: string;
-  targetSkill: string;
-  reasoning: string;
+export interface JobSearchFilters {
+  query: string;
+  location: string;
+  remote: 'Remote' | 'Hybrid' | 'On-site' | 'All';
+  datePosted: string;
+  level: string;
+  type: string;
 }
 
-export interface GeneratedAchievement {
-  originalAnswer: string;
-  improvedBullet: string;
-  suggestedSection: 'experience' | 'projects' | 'summary';
-  relatedId?: string;
+export interface MarketTrends {
+  demandLevel: 'High' | 'Medium' | 'Low';
+  salaryTrend: 'Up' | 'Stable' | 'Down';
+  topSkills: string[];
+  hiringMomentum?: number;
 }
 
-export interface PreviewSuggestion {
+export interface JobSearchHistory {
   id: string;
-  type: 'content' | 'style' | 'grammar';
-  label: string;
-  aiInstruction: string;
+  filters: JobSearchFilters;
+  timestamp: number;
+  resultCount: number;
+}
+
+export interface CareerInsights {
+  opportunities: {
+      title: string;
+      desc: string;
+      type: 'opportunity' | 'risk' | 'success';
+      action: string;
+  }[];
 }
 
 export interface Application {
@@ -305,13 +379,12 @@ export interface Application {
   activeResumeId: string;
   coverLetter: CoverLetter | null;
   atsScore: ATSScore | null;
-  biasAnalysis: BiasAnalysis | null;
   skillMatches: SkillMatch[];
   interviewSession?: InterviewMessage[];
   linkedInProfile?: LinkedInProfile | null;
   salaryInsight?: SalaryInsight | null;
   networkingStrategy?: NetworkingStrategy | null;
-  previewSuggestions?: PreviewSuggestion[];
+  biasAnalysis?: BiasAnalysis | null;
 }
 
 export interface UserProfile {
@@ -320,6 +393,12 @@ export interface UserProfile {
   documents: DocumentItem[];
   applications: Application[];
   privacyMode: boolean;
-  onboardingSeen?: boolean;
   profileComplete: boolean;
+  onboardingSeen?: boolean;
+  level?: number;
+  xp?: number;
+  streak?: number;
+  dailyGoals?: { id: string; text: string; completed: boolean; xp: number }[];
+  achievements?: AchievementEntity[];
+  dataSources?: RawDataSource[];
 }

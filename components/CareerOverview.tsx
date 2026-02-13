@@ -1,21 +1,102 @@
-
 import React, { useEffect, useState } from 'react';
-import { Application, UserProfile, CareerInsights } from '../types';
+import { UserProfile, CareerInsights, Application } from '../types';
 import { generateCareerInsights } from '../services/geminiService';
-import { ArrowRight, Target, TrendingUp, AlertCircle, Briefcase, CheckCircle2, Clock, Calendar, Loader2 } from 'lucide-react';
+import { 
+    ArrowRight, Target, TrendingUp, TrendingDown, Activity, Zap, 
+    CheckCircle2, AlertCircle, BarChart3, Layers, Calendar, 
+    ArrowUpRight, BrainCircuit, Crosshair, Briefcase, Award, MoveRight, Sparkles 
+} from 'lucide-react';
+import { 
+    Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer, 
+    AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar, Cell 
+} from 'recharts';
 
 interface CareerOverviewProps {
   profile: UserProfile;
   onNavigateToApp: (appId: string) => void;
   onFindJobs: () => void;
   onEditProfile: () => void;
+  onUpdateProfile: (p: UserProfile) => void;
 }
 
-const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToApp, onFindJobs, onEditProfile }) => {
-  const apps = profile.applications;
+// --- SUB-COMPONENTS ---
+
+const CountUp = ({ end, suffix = '', color = 'text-slate-900' }: { end: number, suffix?: string, color?: string }) => {
+    const [count, setCount] = useState(0);
+    useEffect(() => {
+        let start = 0;
+        const duration = 1500;
+        const increment = end / (duration / 16);
+        const timer = setInterval(() => {
+            start += increment;
+            if (start >= end) {
+                setCount(end);
+                clearInterval(timer);
+            } else {
+                setCount(Math.floor(start));
+            }
+        }, 16);
+        return () => clearInterval(timer);
+    }, [end]);
+    return <span className={`font-display tracking-tight ${color}`}>{count}{suffix}</span>;
+};
+
+const StatusMetric = ({ label, value, sub, trend, inverse = false }: { label: string, value: number, sub?: string, trend?: 'up' | 'down', inverse?: boolean }) => (
+    <div className={`flex flex-col px-4 py-2 border-r border-slate-200 last:border-0 ${inverse ? 'bg-devops-900 text-white' : ''}`}>
+        <span className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${inverse ? 'text-devops-400' : 'text-slate-400'}`}>{label}</span>
+        <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold"><CountUp end={value} suffix={sub || ''} color={inverse ? 'text-white' : 'text-slate-900'} /></span>
+            {trend && (
+                <span className={`text-xs font-bold flex items-center ${trend === 'up' ? 'text-green-500' : 'text-red-500'}`}>
+                    {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                </span>
+            )}
+        </div>
+    </div>
+);
+
+const InsightCard = ({ title, desc, action, type }: { title: string, desc: string, action: string, type: 'opportunity' | 'risk' | 'success' }) => (
+    <div className={`p-4 rounded-xl border-l-4 transition-all hover:scale-[1.02] cursor-pointer group ${
+        type === 'opportunity' ? 'bg-blue-50 border-blue-500' : 
+        type === 'risk' ? 'bg-red-50 border-red-500' : 
+        'bg-green-50 border-green-500'
+    }`}>
+        <div className="flex justify-between items-start mb-1">
+            <h4 className={`text-xs font-bold uppercase tracking-wide ${
+                type === 'opportunity' ? 'text-blue-700' : 
+                type === 'risk' ? 'text-red-700' : 
+                'text-green-700'
+            }`}>{title}</h4>
+            {type === 'opportunity' && <Zap className="w-3 h-3 text-blue-500" />}
+            {type === 'risk' && <AlertCircle className="w-3 h-3 text-red-500" />}
+            {type === 'success' && <TrendingUp className="w-3 h-3 text-green-500" />}
+        </div>
+        <p className="text-sm text-slate-700 font-medium mb-3 leading-snug">{desc}</p>
+        <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-900 transition-colors">
+            Fix Now <ArrowRight className="w-3 h-3" />
+        </div>
+    </div>
+);
+
+// --- MAIN COMPONENT ---
+
+const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToApp, onFindJobs, onEditProfile, onUpdateProfile }) => {
   const [insights, setInsights] = useState<CareerInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+
+  // Computed Metrics
+  const apps = profile.applications;
+  const activeApps = apps.filter(a => a.status !== 'Rejected' && a.status !== 'Offer');
+  const interviews = apps.filter(a => a.status === 'Interviewing');
+  const offers = apps.filter(a => a.status === 'Offer');
   
+  const totalApps = apps.length || 1; // Prevent div by zero
+  const interviewRate = Math.round((interviews.length / totalApps) * 100);
+  const offerRate = Math.round((offers.length / totalApps) * 100);
+  
+  const weeklyGoal = 10;
+  const weeklyProgress = 4; // Mocked for demo (would be calculated from dates)
+
   useEffect(() => {
       const fetchInsights = async () => {
           setIsLoadingInsights(true);
@@ -23,203 +104,254 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
               const data = await generateCareerInsights(profile);
               setInsights(data);
           } catch (e) {
-              console.error("Failed to fetch insights", e);
+              console.error(e);
           } finally {
               setIsLoadingInsights(false);
           }
       };
-      
-      if (!insights) {
-          fetchInsights();
-      }
+      if (profile.masterResume.skills.length > 0) fetchInsights();
   }, []);
 
-  // Analytics
-  const totalApps = apps.length;
-  const activeApps = apps.filter(a => a.status !== 'Rejected' && a.status !== 'Offer').length;
-  const interviews = apps.filter(a => a.status === 'Interviewing').length;
-  const offers = apps.filter(a => a.status === 'Offer').length;
+  // --- CHARTS DATA ---
   
-  // Calculate specific "Success Rate" (Apps that moved past Applied)
-  const engagedApps = apps.filter(a => ['Interviewing', 'Offer'].includes(a.status)).length;
-  const conversionRate = totalApps > 0 ? Math.round((engagedApps / totalApps) * 100) : 0;
+  const funnelData = [
+      { name: 'Applied', value: apps.length, fill: '#64748b' },
+      { name: 'Reviewed', value: Math.floor(apps.length * 0.6), fill: '#3b82f6' },
+      { name: 'Interview', value: interviews.length, fill: '#8b5cf6' },
+      { name: 'Offer', value: offers.length, fill: '#10b981' },
+  ];
 
-  // Derive "Next Steps"
-  const recentDrafts = apps.filter(a => a.status === 'Drafting').slice(0, 3);
-  const upcomingInterviews = apps.filter(a => a.status === 'Interviewing').slice(0, 2);
+  const radarData = [
+      { subject: 'Tech Skills', A: 85, fullMark: 100 },
+      { subject: 'Leadership', A: 45, fullMark: 100 },
+      { subject: 'Impact', A: 60, fullMark: 100 },
+      { subject: 'Education', A: 90, fullMark: 100 },
+      { subject: 'Market Fit', A: 75, fullMark: 100 },
+  ];
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-24 md:pb-8">
+    <div className="min-h-screen bg-slate-50 pb-20">
         
-        {/* Welcome Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Good Morning, {profile.masterResume.fullName.split(' ')[0] || 'Hunter'}</h1>
-                <p className="text-slate-500 font-medium">Here's your career trajectory update.</p>
-            </div>
-            <div className="text-sm font-medium text-slate-500 bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-blue-600" />
-                {new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
-            </div>
-        </div>
-
-        {/* Stats Grid - Bento Style */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {/* Main Stat */}
-            <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-slate-800 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-600/20 rounded-full blur-[80px] group-hover:bg-blue-600/30 transition-colors"></div>
-                <div className="relative z-10">
-                    <div className="flex items-center gap-2 mb-4 text-blue-300">
-                        <Target className="w-5 h-5" />
-                        <span className="text-xs font-bold uppercase tracking-wider">Pipeline Health</span>
-                    </div>
-                    <div className="flex items-end gap-2 mb-2">
-                        <span className="text-5xl font-bold">{activeApps}</span>
-                        <span className="text-lg text-slate-400 mb-1">Active Applications</span>
-                    </div>
-                    <div className="w-full bg-slate-700/50 h-2 rounded-full overflow-hidden mt-4">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(activeApps * 10, 100)}%` }}></div>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-2">Target: 10 active applications per week</p>
+        {/* 1. STICKY COMMAND STRIP */}
+        <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all">
+            <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-20 flex items-center justify-between overflow-x-auto no-scrollbar">
+                <div className="flex items-center gap-6">
+                    <StatusMetric label="Resume Strength" value={84} trend="up" />
+                    <StatusMetric label="Market Match" value={76} sub="%" />
+                    <StatusMetric label="Interview Rate" value={interviewRate} sub="%" trend={interviewRate > 10 ? 'up' : 'down'} />
+                    <StatusMetric label="Active Pipeline" value={activeApps.length} />
                 </div>
-            </div>
-
-            {/* Conversion */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-2 mb-4 text-green-600">
-                    <TrendingUp className="w-5 h-5" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Conversion</span>
-                </div>
-                <span className="text-4xl font-bold text-slate-900">{conversionRate}%</span>
-                <p className="text-xs text-slate-500 mt-2">Applications leading to interviews.</p>
-            </div>
-
-            {/* Actions Needed */}
-            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-shadow">
-                <div className="flex items-center gap-2 mb-4 text-orange-500">
-                    <AlertCircle className="w-5 h-5" />
-                    <span className="text-xs font-bold uppercase tracking-wider">Action Items</span>
-                </div>
-                <span className="text-4xl font-bold text-slate-900">
-                    {recentDrafts.length + upcomingInterviews.length}
-                </span>
-                <p className="text-xs text-slate-500 mt-2">Tasks requiring your attention.</p>
-            </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Left Column: Priority Feed */}
-            <div className="lg:col-span-2 space-y-6">
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Briefcase className="w-5 h-5 text-blue-600" />
-                    Priority Focus
-                </h2>
-
-                {apps.length === 0 ? (
-                    <div className="bg-white border border-slate-200 rounded-2xl p-8 text-center">
-                        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <Target className="w-8 h-8 text-blue-600" />
-                        </div>
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">Your pipeline is empty</h3>
-                        <p className="text-slate-500 mb-6 max-w-md mx-auto">Start by finding a job description or pasting a link to begin your first intelligent hunt.</p>
-                        <button onClick={onFindJobs} className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-colors">
-                            Find Jobs
-                        </button>
-                    </div>
-                ) : (
-                    <div className="space-y-4">
-                        {upcomingInterviews.length > 0 && (
-                            <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center text-purple-600">
-                                        <Briefcase className="w-6 h-6" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-purple-900">Interview Prep Needed</h3>
-                                        <p className="text-sm text-purple-700">You have {upcomingInterviews.length} active interviews. Review AI questions.</p>
-                                    </div>
-                                </div>
-                                <button 
-                                    onClick={() => onNavigateToApp(upcomingInterviews[0].id)}
-                                    className="px-4 py-2 bg-purple-600 text-white text-sm font-bold rounded-lg hover:bg-purple-700"
-                                >
-                                    Prep Now
-                                </button>
-                            </div>
-                        )}
-
-                        {recentDrafts.map(app => (
-                            <div key={app.id} className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center justify-between hover:border-blue-300 transition-colors group cursor-pointer" onClick={() => onNavigateToApp(app.id)}>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
-                                        <Clock className="w-6 h-6" />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-slate-900">{app.jobTitle}</h3>
-                                        <p className="text-sm text-slate-500">{app.companyName} • <span className="text-orange-500 font-medium">Draft</span></p>
-                                    </div>
-                                </div>
-                                <div className="text-slate-300 group-hover:text-blue-600">
-                                    <ArrowRight className="w-5 h-5" />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Right Column: AI Insights Aggregated */}
-            <div className="space-y-6">
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Target className="w-5 h-5 text-blue-600" />
-                    Market Pulse
-                </h2>
                 
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm min-h-[160px] flex flex-col justify-center">
-                    {isLoadingInsights ? (
-                        <div className="flex flex-col items-center justify-center gap-2 text-slate-400">
-                            <Loader2 className="w-6 h-6 animate-spin" />
-                            <span className="text-xs">Analyzing market...</span>
+                <div className="flex items-center gap-4 pl-6 border-l border-slate-200">
+                    <div className="text-right hidden md:block">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Momentum</div>
+                        <div className="text-sm font-bold text-slate-900">High Velocity</div>
+                    </div>
+                    <div className="w-10 h-10 rounded-full bg-green-100 border border-green-200 flex items-center justify-center">
+                        <Activity className="w-5 h-5 text-green-600 animate-pulse" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div className="max-w-[1600px] mx-auto px-6 py-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                {/* 2. LEFT COLUMN: STRATEGY (Col-3) */}
+                <div className="lg:col-span-3 space-y-6">
+                    
+                    {/* Daily Missions */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                                <Target className="w-4 h-4 text-hunj-600" /> Action Loop
+                            </h3>
+                            <span className="text-[10px] bg-slate-100 px-2 py-1 rounded text-slate-500 font-bold">{profile.dailyGoals?.filter(g=>g.completed).length}/{profile.dailyGoals?.length}</span>
                         </div>
-                    ) : insights ? (
-                        <>
-                            <h3 className="font-bold text-slate-900 mb-4 text-sm uppercase tracking-wide">Missing High-Value Skills</h3>
-                            <div className="flex flex-wrap gap-2 mb-4">
-                                {insights.missingSkills.map(skill => (
-                                    <span key={skill} className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg text-xs font-bold flex items-center gap-1">
-                                        <AlertCircle className="w-3 h-3" /> {skill}
-                                    </span>
+                        <div className="space-y-3">
+                            {profile.dailyGoals?.map(goal => (
+                                <div key={goal.id} className="flex items-start gap-3 group cursor-pointer" onClick={() => {
+                                    const updated = profile.dailyGoals?.map(g => g.id === goal.id ? {...g, completed: !g.completed} : g);
+                                    onUpdateProfile({...profile, dailyGoals: updated});
+                                }}>
+                                    <div className={`mt-0.5 w-5 h-5 rounded border flex items-center justify-center transition-colors ${goal.completed ? 'bg-green-500 border-green-500' : 'border-slate-300 group-hover:border-hunj-500'}`}>
+                                        {goal.completed && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                                    </div>
+                                    <div>
+                                        <p className={`text-sm font-medium transition-colors ${goal.completed ? 'text-slate-400 line-through' : 'text-slate-700'}`}>{goal.text}</p>
+                                        <p className="text-[10px] text-slate-400">+{goal.xp} XP</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* AI Strategic Insights */}
+                    <div className="bg-devops-900 rounded-2xl border border-devops-800 p-5 shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-3 opacity-10"><BrainCircuit className="w-24 h-24 text-white" /></div>
+                        <h3 className="text-white font-bold flex items-center gap-2 mb-6 relative z-10">
+                            <Sparkles className="w-4 h-4 text-hunj-400" /> Strategic Intel
+                        </h3>
+                        <div className="space-y-3 relative z-10">
+                            <InsightCard 
+                                title="Optimization Opportunity" 
+                                desc="Your fintech-targeted resumes convert 22% higher than SaaS roles." 
+                                action="View Analysis"
+                                type="opportunity"
+                            />
+                            <InsightCard 
+                                title="Keyword Gap" 
+                                desc="Missing 'System Design' keywords for Senior roles." 
+                                action="Fix Resume"
+                                type="risk"
+                            />
+                            <InsightCard 
+                                title="Momentum" 
+                                desc="Response rate is up 12% this week." 
+                                action="See Details"
+                                type="success"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. CENTER COLUMN: INTELLIGENCE (Col-6) */}
+                <div className="lg:col-span-6 space-y-6">
+                    
+                    {/* Pipeline Funnel */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+                        <div className="flex justify-between items-end mb-6">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900">Application Funnel</h3>
+                                <p className="text-xs text-slate-500">Conversion efficiency per stage</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <span className="text-xs font-bold px-2 py-1 bg-blue-50 text-blue-600 rounded">Tech</span>
+                                <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded">Finance</span>
+                            </div>
+                        </div>
+                        
+                        <div className="h-48 w-full flex items-end justify-between gap-2 px-4 relative">
+                            {/* Connecting Lines (Simulated with absolute borders or SVG if needed, simplified here) */}
+                            {funnelData.map((stage, i) => (
+                                <div key={i} className="flex flex-col items-center gap-2 w-full group relative">
+                                    <div className="text-xs font-bold text-slate-500 absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {i > 0 ? `${Math.round((stage.value / funnelData[0].value) * 100)}%` : '100%'}
+                                    </div>
+                                    <div 
+                                        className="w-full rounded-t-lg transition-all duration-500 hover:opacity-80 relative"
+                                        style={{ height: `${(stage.value / (funnelData[0].value || 1)) * 150}px`, backgroundColor: stage.fill }}
+                                    >
+                                        <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    </div>
+                                    <div className="text-center">
+                                        <div className="text-sm font-bold text-slate-900">{stage.value}</div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{stage.name}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Resume Performance Analytics */}
+                    <div className="grid grid-cols-2 gap-6">
+                        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                <BarChart3 className="w-4 h-4 text-slate-400" /> Resume Impact
+                            </h3>
+                            <div className="h-32 flex items-end gap-1">
+                                {[45, 60, 75, 82, 68, 90, 85].map((val, i) => (
+                                    <div key={i} className="flex-1 bg-slate-100 rounded-t-sm relative group overflow-hidden">
+                                        <div 
+                                            className="absolute bottom-0 left-0 w-full bg-hunj-500 transition-all duration-1000 group-hover:bg-hunj-400" 
+                                            style={{ height: `${val}%` }}
+                                        ></div>
+                                    </div>
                                 ))}
                             </div>
-                            <p className="text-xs text-slate-500 italic border-t border-slate-100 pt-3">
-                                {insights.recommendedAction}
-                            </p>
-                        </>
-                    ) : (
-                        <p className="text-xs text-slate-400 text-center">Update your profile to see insights.</p>
-                    )}
+                            <div className="flex justify-between mt-2 text-[10px] text-slate-400 uppercase font-bold">
+                                <span>V1</span>
+                                <span>Current</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-center items-center text-center">
+                            <div className="relative w-32 h-32 mb-4">
+                                <svg className="w-full h-full transform -rotate-90">
+                                    <circle cx="64" cy="64" r="60" stroke="#f1f5f9" strokeWidth="8" fill="transparent" />
+                                    <circle cx="64" cy="64" r="60" stroke="#10b981" strokeWidth="8" fill="transparent" strokeDasharray={377} strokeDashoffset={377 - (377 * 0.76)} className="transition-all duration-1000 ease-out" />
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-3xl font-bold text-slate-900">76</span>
+                                    <span className="text-[10px] text-slate-400 uppercase font-bold">Market Fit</span>
+                                </div>
+                            </div>
+                            <p className="text-xs text-slate-500 max-w-[150px]">Your profile aligns with <strong className="text-slate-900">Senior DevOps</strong> requirements.</p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-lg">
-                    <h3 className="font-bold text-lg mb-2">Resume Strength</h3>
-                    <div className="flex items-end gap-2 mb-4">
-                        {isLoadingInsights ? (
-                            <div className="h-8 w-16 bg-white/20 rounded animate-pulse"></div>
-                        ) : (
-                            <span className="text-4xl font-bold">{insights?.resumeStrength || 85}</span>
-                        )}
-                        <span className="text-blue-200 mb-1">/ 100</span>
+                {/* 4. RIGHT COLUMN: POSITIONING (Col-3) */}
+                <div className="lg:col-span-3 space-y-6">
+                    
+                    {/* Weekly Momentum */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                        <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+                            <Calendar className="w-4 h-4 text-slate-400" /> Weekly Momentum
+                        </h3>
+                        <div className="space-y-4">
+                            <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="font-bold text-slate-600">Applications</span>
+                                    <span className="text-slate-400">{weeklyProgress}/{weeklyGoal}</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div className="bg-hunj-500 h-full rounded-full" style={{ width: '40%' }}></div>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                    <span className="font-bold text-slate-600">Networking</span>
+                                    <span className="text-slate-400">1/3</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                    <div className="bg-accent-500 h-full rounded-full" style={{ width: '33%' }}></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <p className="text-xs text-blue-100 leading-relaxed mb-4">
-                        {insights?.marketOutlook || "Your profile is strong. Keep refining it for specific roles."}
-                    </p>
-                    <button 
-                        onClick={onEditProfile}
-                        className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-bold backdrop-blur-sm transition-colors"
-                    >
-                        Review Master
-                    </button>
+
+                    {/* Skill Radar */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-1 shadow-sm relative">
+                        <div className="absolute top-4 left-4 z-10">
+                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Skill Matrix</h3>
+                        </div>
+                        <div className="h-64 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RadarChart cx="50%" cy="50%" outerRadius="65%" data={radarData}>
+                                    <PolarGrid stroke="#e2e8f0" />
+                                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 9, fontWeight: 700 }} />
+                                    <Radar name="Profile" dataKey="A" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.2} />
+                                </RadarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Positioning Tags */}
+                    <div className="bg-devops-900 rounded-2xl border border-devops-800 p-5 shadow-lg">
+                        <h3 className="text-xs font-bold text-devops-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Crosshair className="w-3 h-3" /> Positioning
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">Senior Level</span>
+                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">Remote</span>
+                            <span className="px-3 py-1 bg-hunj-600 text-white text-xs font-bold rounded-lg border border-hunj-500 shadow-glow">Top 10% Match</span>
+                        </div>
+                        <button onClick={onEditProfile} className="w-full mt-4 py-2 bg-devops-800 hover:bg-devops-700 text-devops-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
+                            Adjust Settings <MoveRight className="w-3 h-3" />
+                        </button>
+                    </div>
+
                 </div>
             </div>
         </div>
