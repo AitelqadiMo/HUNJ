@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { ExternalJob, UserPreferences, JobSearchFilters, MarketTrends, JobSearchHistory } from '../types';
-import { findVisaSponsoringJobs, analyzeJobMarketTrends, generateCoverLetter } from '../services/geminiService';
+import { findVisaSponsoringJobs, analyzeJobMarketTrends } from '../services/geminiService';
 import { storageService } from '../services/storageService';
 import MarketPulse from './MarketPulse';
 import JobIntelligence from './JobIntelligence';
@@ -54,6 +54,14 @@ const SmartTag = ({ type, text }: { type: 'salary' | 'visa' | 'location' | 'defa
 }
 
 const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
+  const inferredQuery = preferences.targetRoles?.[0] || preferences.preferredTechStack?.[0] || '';
+  const inferredLocation = preferences.remotePreference === 'Remote' ? 'Remote' : 'All';
+  const hasProfileSignals = Boolean(
+    (preferences.targetRoles && preferences.targetRoles.length > 0) ||
+    (preferences.preferredTechStack && preferences.preferredTechStack.length > 0) ||
+    (preferences.targetIndustries && preferences.targetIndustries.length > 0)
+  );
+
   // Data State
   const [jobs, setJobs] = useState<ExternalJob[]>([]);
   const [marketTrends, setMarketTrends] = useState<MarketTrends | null>(null);
@@ -70,17 +78,25 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
 
   // Filters State
   const [filters, setFilters] = useState<JobSearchFilters>({
-      query: preferences.targetRoles?.[0] || 'DevOps Engineer',
-      location: 'Netherlands',
+      query: inferredQuery,
+      location: inferredLocation,
       remote: 'All',
       datePosted: 'Past Month',
       level: 'Any',
-      type: 'Full-time'
+      type: 'Full-time',
+      company: '',
+      easyApply: 'Any',
+      visa: 'Any',
+      minSalary: 0,
+      minMatch: 0
   });
 
   // Initial Load
   useEffect(() => {
       setSearchHistory(storageService.getSearchHistory());
+      if (!hasProfileSignals) {
+          setError("Your profile is missing target role/skills. Add them in Profile, or search manually below.");
+      }
       const cached = storageService.getJobCache(filters);
       if (cached) {
           setJobs(enhanceJobsWithIntelligence(cached));
@@ -119,6 +135,9 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
 
     try {
       const results = await findVisaSponsoringJobs(filters);
+      if (!results.length) {
+          setError('No matching jobs were found from current sources. Try broader filters or update profile targeting.');
+      }
       
       const enhancedResults = enhanceJobsWithIntelligence(results);
 
@@ -150,12 +169,24 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
   };
 
   const sortedJobs = useMemo(() => {
-      const list = [...jobs];
+      const list = [...jobs].filter(job => {
+          if (filters.company && !job.company.toLowerCase().includes(filters.company.toLowerCase())) return false;
+          if (filters.visa === 'Yes' && !job.visaSupport) return false;
+          if (filters.visa === 'No' && job.visaSupport) return false;
+          if (filters.easyApply === 'Yes' && !job.easyApply) return false;
+          if (filters.easyApply === 'No' && job.easyApply) return false;
+          if ((filters.minMatch || 0) > 0 && (job.matchScore || 0) < (filters.minMatch || 0)) return false;
+          if ((filters.minSalary || 0) > 0) {
+              const numeric = Number((job.salaryRange || '').replace(/[^\d]/g, '').slice(0, 6)) || 0;
+              if (numeric > 0 && numeric < (filters.minSalary || 0)) return false;
+          }
+          return true;
+      });
       if (sortMode === 'Smart Rank') return list.sort((a, b) => b.matchScore - a.matchScore);
       if (sortMode === 'Date') return list; // Assumed roughly sorted by API
       if (sortMode === 'Salary') return list.sort((a, b) => (b.salaryRange ? 1 : -1)); 
       return list;
-  }, [jobs, sortMode]);
+  }, [jobs, sortMode, filters.company, filters.visa, filters.easyApply, filters.minSalary, filters.minMatch]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-64px)] bg-slate-100 text-slate-900 font-sans overflow-hidden">
@@ -174,6 +205,11 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-5 space-y-6 custom-scrollbar">
+                    {!hasProfileSignals && (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
+                            No profile role/skill signals found. Add them in Profile for better job suggestions, or run manual search here.
+                        </div>
+                    )}
                     <div className="space-y-2">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Role</label>
                         <div className="relative">
@@ -211,7 +247,7 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
                     <div className="space-y-3">
                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Work Mode</label>
                         <div className="flex flex-wrap gap-2">
-                            {['Remote', 'Hybrid', 'On-site'].map(opt => (
+                            {['All', 'Remote', 'Hybrid', 'On-site'].map(opt => (
                                 <button 
                                     key={opt}
                                     onClick={() => setFilters(prev => ({ ...prev, remote: opt as any }))}
@@ -225,6 +261,56 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Company</label>
+                        <input
+                            type="text"
+                            value={filters.company || ''}
+                            onChange={(e) => setFilters(prev => ({ ...prev, company: e.target.value }))}
+                            placeholder="Company name"
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-hunj-500/20 focus:border-hunj-500"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Visa Sponsorship</label>
+                        <select
+                            value={filters.visa}
+                            onChange={(e) => setFilters(prev => ({ ...prev, visa: e.target.value as any }))}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                        >
+                            <option value="Any">Any</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Easy Apply</label>
+                        <select
+                            value={filters.easyApply}
+                            onChange={(e) => setFilters(prev => ({ ...prev, easyApply: e.target.value as any }))}
+                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                        >
+                            <option value="Any">Any</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Minimum Match ({filters.minMatch || 0}%)</label>
+                        <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            step={5}
+                            value={filters.minMatch || 0}
+                            onChange={(e) => setFilters(prev => ({ ...prev, minMatch: Number(e.target.value) }))}
+                            className="w-full"
+                        />
                     </div>
 
                     <button 
@@ -264,6 +350,11 @@ const JobBoard: React.FC<JobBoardProps> = ({ preferences, onPersonalize }) => {
                         <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
                             <Loader2 className="w-8 h-8 animate-spin text-hunj-500" />
                             <p className="text-sm font-medium">Analyzing opportunities...</p>
+                        </div>
+                    ) : error ? (
+                        <div className="text-center py-16">
+                            <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                            <p className="text-sm text-slate-700">{error}</p>
                         </div>
                     ) : jobs.length === 0 && !error ? (
                         <div className="text-center py-20 opacity-50">

@@ -51,6 +51,19 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ documents, onAddDocum
     return <div className="w-10 h-10 bg-gray-500/10 rounded-lg flex items-center justify-center text-gray-500"><File className="w-6 h-6" /></div>;
   };
 
+  const handleDownload = (doc: DocumentItem) => {
+    const payload = `HUNJ Document Export\nName: ${doc.name}\nType: ${doc.type}\nFormat: ${doc.format}\nAdded: ${doc.dateAdded}\nSize: ${doc.size}\nTags: ${doc.tags.join(', ')}`;
+    const blob = new Blob([payload], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${doc.name}`.replace(/\s+/g, '-').toLowerCase();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="h-full flex flex-col p-6 md:p-10 max-w-7xl mx-auto w-full">
       {/* Header */}
@@ -122,7 +135,7 @@ const DocumentLibrary: React.FC<DocumentLibraryProps> = ({ documents, onAddDocum
                 </div>
 
                 <div className="mt-auto pt-4 border-t border-devops-800 flex justify-between items-center opacity-50 group-hover:opacity-100 transition-opacity">
-                    <button className="text-xs font-bold text-devops-400 hover:text-white flex items-center gap-1">
+                    <button onClick={() => handleDownload(doc)} className="text-xs font-bold text-devops-400 hover:text-white flex items-center gap-1">
                         <Download className="w-3 h-3" /> Download
                     </button>
                     <button onClick={() => onDeleteDocument(doc.id)} className="p-1.5 hover:bg-red-500/20 text-devops-500 hover:text-red-400 rounded transition-colors">

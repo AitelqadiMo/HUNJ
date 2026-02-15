@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { User, UserProfile, ResumeData } from '../types';
 import { storageService } from '../services/storageService';
 import { logger } from '../services/loggingService';
+import { ensureDailyUsage } from '../services/planService';
 import { Target, ArrowRight, Loader2, Info, AlertTriangle, UserCircle, Copy, Check, Sparkles, Fingerprint } from 'lucide-react';
 
 declare global {
@@ -58,7 +59,19 @@ const INITIAL_PROFILE: UserProfile = {
     },
     documents: [],
     onboardingSeen: false,
-    profileComplete: false
+    profileComplete: false,
+    xp: 0,
+    streak: 1,
+    level: 1,
+    dailyGoals: [
+      { id: '1', text: 'Apply to 3 jobs', completed: false, xp: 50 },
+      { id: '2', text: 'Update master resume', completed: false, xp: 30 },
+      { id: '3', text: 'Connect with 2 recruiters', completed: false, xp: 40 }
+    ],
+    achievements: [],
+    dataSources: [],
+    billing: { plan: 'free', status: 'active' },
+    usageStats: ensureDailyUsage()
 };
 
 const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {

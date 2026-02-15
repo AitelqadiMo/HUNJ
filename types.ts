@@ -164,6 +164,8 @@ export interface ExternalJob {
   tags: string[];
   interviewProbability?: number;
   missingSkills?: string[];
+  easyApply?: boolean;
+  employmentType?: string;
 }
 
 export interface UserPreferences {
@@ -185,6 +187,11 @@ export interface JobSearchFilters {
   datePosted: string;
   level: string;
   type: string;
+  company?: string;
+  easyApply?: 'Any' | 'Yes' | 'No';
+  visa?: 'Any' | 'Yes' | 'No';
+  minSalary?: number;
+  minMatch?: number;
 }
 
 export interface MarketTrends {
@@ -215,6 +222,25 @@ export interface RawDataSource {
   entityCount: number;
 }
 
+export type SubscriptionTier = 'free' | 'pro' | 'team';
+
+export interface BillingState {
+  plan: SubscriptionTier;
+  status: 'active' | 'trialing' | 'past_due' | 'canceled';
+  renewsAt?: string;
+  customerId?: string;
+  subscriptionId?: string;
+  cancelAtPeriodEnd?: boolean;
+  canceledAt?: string;
+}
+
+export interface UsageStats {
+  dayKey: string;
+  aiActions: number;
+  resumesGenerated: number;
+  jobSearches: number;
+}
+
 export interface UserProfile {
   masterResume: ResumeData;
   applications: Application[];
@@ -229,6 +255,8 @@ export interface UserProfile {
   dailyGoals: { id: string; text: string; completed: boolean; xp: number }[];
   achievements: AchievementEntity[];
   dataSources: RawDataSource[];
+  billing: BillingState;
+  usageStats: UsageStats;
 }
 
 export interface CareerInsights {

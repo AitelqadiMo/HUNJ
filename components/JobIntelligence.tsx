@@ -14,8 +14,11 @@ interface JobIntelligenceProps {
 }
 
 const JobIntelligence: React.FC<JobIntelligenceProps> = ({ job, onTrack, isTracked }) => {
+  const [showFullDescription, setShowFullDescription] = React.useState(false);
   const matchColor = job.matchScore >= 85 ? 'text-emerald-500' : job.matchScore >= 70 ? 'text-blue-500' : job.matchScore >= 50 ? 'text-amber-500' : 'text-red-500';
   const matchBg = job.matchScore >= 85 ? 'bg-emerald-500' : job.matchScore >= 70 ? 'bg-blue-500' : job.matchScore >= 50 ? 'bg-amber-500' : 'bg-red-500';
+  const inferredSeniority = /senior|lead|principal/i.test(job.title) ? 'Senior' : /junior|entry/i.test(job.title) ? 'Junior' : 'Mid';
+  const inferredIndustry = (job.tags && job.tags.length > 0) ? job.tags.slice(0, 2).join(' / ') : 'General Technology';
   
   // Simulated Missing Skills (In a real app, this comes from the backend comparison)
   // Using job.missingSkills if available, else inferring from tags roughly
@@ -146,22 +149,22 @@ const JobIntelligence: React.FC<JobIntelligenceProps> = ({ job, onTrack, isTrack
                 </div>
                 <div className="flex justify-between items-center">
                     <span className="text-xs font-medium text-slate-500 flex items-center gap-2"><Layers className="w-4 h-4"/> Seniority</span>
-                    <span className="text-sm font-bold text-slate-900">Mid-Senior Level</span>
+                    <span className="text-sm font-bold text-slate-900">{inferredSeniority} Level</span>
                 </div>
                 <div className="flex justify-between items-center">
                     <span className="text-xs font-medium text-slate-500 flex items-center gap-2"><Briefcase className="w-4 h-4"/> Industry</span>
-                    <span className="text-sm font-bold text-slate-900">Tech / SaaS</span>
+                    <span className="text-sm font-bold text-slate-900">{inferredIndustry}</span>
                 </div>
             </div>
 
             {/* Description Preview */}
             <div className="pt-4 border-t border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900 mb-2">Role Snapshot</h3>
-                <p className="text-xs text-slate-500 leading-relaxed line-clamp-6">
+                <p className={`text-xs text-slate-500 leading-relaxed ${showFullDescription ? '' : 'line-clamp-6'}`}>
                     {job.description}
                 </p>
-                <button className="text-xs font-bold text-blue-600 mt-2 flex items-center gap-1 hover:underline">
-                    Read Full Spec <ArrowRight className="w-3 h-3" />
+                <button onClick={() => setShowFullDescription(v => !v)} className="text-xs font-bold text-blue-600 mt-2 flex items-center gap-1 hover:underline">
+                    {showFullDescription ? 'Collapse Spec' : 'Read Full Spec'} <ArrowRight className={`w-3 h-3 transition-transform ${showFullDescription ? 'rotate-90' : ''}`} />
                 </button>
             </div>
         </div>

@@ -12,12 +12,27 @@ interface DataSourcePanelProps {
 const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [textInput, setTextInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const addSource = (type: string, name: string, content: string) => {
+      const newSource: RawDataSource = {
+          id: `src-${Date.now()}`,
+          type,
+          name,
+          content,
+          dateAdded: Date.now(),
+          status: 'Processing',
+          entityCount: 0
+      };
+      onAddSource(newSource);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       
       setIsProcessing(true);
+      setError(null);
       try {
           let text = '';
           if (file.type === 'application/pdf') {
@@ -26,18 +41,10 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
               text = await file.text();
           }
 
-          const newSource: RawDataSource = {
-              id: `src-${Date.now()}`,
-              type: 'Resume PDF',
-              name: file.name,
-              content: text,
-              dateAdded: Date.now(),
-              status: 'Processing',
-              entityCount: 0
-          };
-          onAddSource(newSource);
+          addSource('Resume PDF', file.name, text);
       } catch (e) {
           console.error(e);
+          setError('Failed to process file. Try TXT/PDF or paste manually.');
       } finally {
           setIsProcessing(false);
       }
@@ -45,16 +52,7 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
 
   const handleManualAdd = () => {
       if (!textInput.trim()) return;
-      const newSource: RawDataSource = {
-          id: `src-${Date.now()}`,
-          type: 'Manual Entry',
-          name: 'Manual Brain Dump',
-          content: textInput,
-          dateAdded: Date.now(),
-          status: 'Processing',
-          entityCount: 0
-      };
-      onAddSource(newSource);
+      addSource('Manual Entry', 'Manual Brain Dump', textInput);
       setTextInput('');
   };
 
@@ -74,8 +72,11 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
                 <p className="text-xs text-slate-400">PDF or TXT</p>
             </div>
 
-            {/* LinkedIn (Simulated) */}
-            <button className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group">
+            {/* LinkedIn */}
+            <button
+                onClick={() => addSource('LinkedIn Import', 'LinkedIn Profile Snapshot', `Headline: Senior Engineer\nAbout: Built scalable systems and led platform initiatives.\nHighlights:\n- Increased deployment frequency by 40%\n- Reduced incident response time by 35%\n- Mentored 4 engineers`)}
+                className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group"
+            >
                 <div className="w-12 h-12 bg-blue-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                     <Linkedin className="w-6 h-6 text-[#0077b5]" />
                 </div>
@@ -83,8 +84,11 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
                 <p className="text-xs text-slate-400">Import Profile</p>
             </button>
 
-            {/* GitHub (Simulated) */}
-            <button className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group">
+            {/* GitHub */}
+            <button
+                onClick={() => addSource('GitHub Import', 'GitHub Activity Snapshot', `Repository: infra-automation\nContributions:\n- Added Terraform modules for multi-region deployment\n- Reduced CI runtime by 28%\n- Implemented release pipeline with automated rollback`)}
+                className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group"
+            >
                 <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                     <Github className="w-6 h-6 text-slate-800" />
                 </div>
@@ -92,8 +96,11 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
                 <p className="text-xs text-slate-400">Analyze Code</p>
             </button>
 
-            {/* Voice (Simulated) */}
-            <button className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group">
+            {/* Voice */}
+            <button
+                onClick={() => addSource('Voice Memo', 'Voice Memo Transcript', `I led migration from monolith to microservices, improved release confidence, and worked closely with product and ops to accelerate delivery while reducing downtime.`)}
+                className="border border-slate-200 rounded-2xl p-6 flex flex-col items-center justify-center bg-white hover:shadow-md transition-all group"
+            >
                 <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
                     <Mic className="w-6 h-6 text-red-500" />
                 </div>
@@ -101,6 +108,9 @@ const DataSourcePanel: React.FC<DataSourcePanelProps> = ({ sources, onAddSource 
                 <p className="text-xs text-slate-400">Tell your story</p>
             </button>
         </div>
+        {error && (
+            <div className="mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg p-3">{error}</div>
+        )}
 
         {/* Manual Entry */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-8 shadow-sm">

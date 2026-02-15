@@ -109,6 +109,23 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({ applications, onSelectApplica
                                         <BrainCircuit className="w-4 h-4" />
                                     </button>
                                 </div>
+
+                                <div className="mb-3">
+                                    <label className="block text-[9px] font-bold uppercase tracking-wide text-slate-400 mb-1">Stage</label>
+                                    <select
+                                        value={app.status}
+                                        onClick={(e) => e.stopPropagation()}
+                                        onChange={(e) => {
+                                            e.stopPropagation();
+                                            onUpdateStatus(app.id, e.target.value as Application['status']);
+                                        }}
+                                        className="w-full text-xs font-semibold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-700"
+                                    >
+                                        {COLUMNS.map(stage => (
+                                            <option key={stage} value={stage}>{stage}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 
                                 {/* Metrics Grid */}
                                 <div className="grid grid-cols-2 gap-2 mt-4">

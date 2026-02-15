@@ -33,11 +33,11 @@ The modern job market is automated; your application process should be too. HUNJ
 HUNJ leverages the **Google Gemini API** (`@google/genai`) with a sophisticated multi-model strategy to balance latency and reasoning depth.
 
 ### 1. Dual-Model Strategy
-*   **`gemini-3-flash-preview` (The Analyst):**
+*   **`gemini-2.5-flash-lite` (The Analyst):**
     *   *Role:* Used for high-speed, low-latency tasks.
     *   *Tasks:* Initial job description parsing, ATS scoring, real-time market trends, skill gap analysis, and UI widget generation.
     *   *Benefit:* Provides near-instant feedback to the user.
-*   **`gemini-3-pro-preview` (The Architect):**
+*   **`gemini-2.5-flash` (The Architect):**
     *   *Role:* Used for complex reasoning and creative generation.
     *   *Tasks:* Resume rewriting, cover letter composition, mock interview simulation, and "Deep Dive" probing questions.
     *   *Benefit:* Delivers nuanced, high-quality content that mimics human expert writing.
@@ -171,9 +171,9 @@ HUNJ is designed with a **Local-First** architecture.
     ```
 
 3.  **Configuration:**
-    Set your API key in your environment (e.g., `.env` or build configuration):
+    Set your API key in your environment (e.g., `.env.local`):
     ```env
-    API_KEY=your_google_gemini_key
+    VITE_GEMINI_API_KEY=your_google_gemini_key
     ```
 
 4.  **Run Development Server:**
@@ -185,6 +185,41 @@ HUNJ is designed with a **Local-First** architecture.
     *   **Login:** Use the Guest Mode for instant access or simulate email login.
     *   **Onboarding:** Complete the wizard to set your Target Role.
     *   **Import:** Upload a PDF resume to populate your Master Profile.
+
+---
+
+## 💳 Stripe + Firestore Subscription Backend
+
+HUNJ now supports backend subscription state sync.
+
+### Backend setup
+1. Install dependencies:
+```bash
+npm install
+```
+2. Copy `.env.example` values into your local env.
+3. Add your Firebase service account JSON and set:
+```env
+FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
+```
+4. Run billing API:
+```bash
+npm run server
+```
+
+### Stripe webhook
+Use Stripe CLI to forward events:
+```bash
+stripe listen --forward-to localhost:8787/api/billing/webhook
+```
+
+### Firestore collections
+The backend writes:
+- `users/{userId}` with `billing.plan`, `billing.status`, `billing.customerId`, `billing.renewsAt`
+- `subscriptions/{checkoutSessionId}` audit trail
+
+Frontend syncs subscription state from:
+- `GET /api/billing/status?userId=...&email=...`
 
 ---
 

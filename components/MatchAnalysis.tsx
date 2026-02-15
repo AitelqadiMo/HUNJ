@@ -26,7 +26,8 @@ const MatchAnalysis: React.FC<MatchAnalysisProps> = ({ score, job, skillMatches,
   const impactScore = score.breakdown.quantifiable * 10; // 0-10 scale -> 0-100
   const atsScore = score.breakdown.structure * 10;
   const relevanceScore = job?.hiringProbability || 50;
-  const seniorityScore = 80; // Simulated for demo
+  const seniorityRaw = (job?.seniorityLevel || job?.experienceLevel || '').toLowerCase();
+  const seniorityScore = seniorityRaw.includes('senior') ? 85 : seniorityRaw.includes('lead') ? 90 : seniorityRaw.includes('junior') ? 50 : 70;
 
   const data = [
     { subject: 'Skills', A: skillsScore, fullMark: 100 },

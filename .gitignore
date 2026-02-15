@@ -22,3 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+firebase-service-account*.json
+server/.secrets/*
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key

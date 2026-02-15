@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ResumeData, ResumeThemeConfig, PreviewSuggestion, JobAnalysis, TemplateRecommendation, ResumeLayout } from '../types';
 import { generatePreviewSuggestions, recommendTemplate } from '../services/geminiService';
-import { Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Phone, Mail, MapPin, Globe, Linkedin, LayoutTemplate, Type, Eye, MoveUp, MoveDown, Grid2X2, AlignLeft, BookOpen, Layers, Settings, EyeOff, FileText, GripVertical, Terminal, Hash, Command } from 'lucide-react';
+import { Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Phone, Mail, MapPin, Globe, Linkedin, LayoutTemplate, Type, Eye, MoveUp, MoveDown, Grid2X2, AlignLeft, BookOpen, Layers, Settings, EyeOff, FileText, GripVertical, Terminal, Hash, Command, X } from 'lucide-react';
 
 declare var html2pdf: any;
 
@@ -45,6 +45,39 @@ const useContentOptimizer = (resume: ResumeData, theme: ResumeThemeConfig) => {
         return optimized;
     }, [resume, theme.targetPageCount]);
 };
+
+type TemplatePreset = {
+    id: string;
+    baseName: string;
+    creativeName: string;
+    layout: ResumeLayout;
+    font: ResumeThemeConfig['font'];
+    density: ResumeThemeConfig['density'];
+    accentColor: string;
+    pageSize: ResumeThemeConfig['pageSize'];
+    targetPageCount: ResumeThemeConfig['targetPageCount'];
+};
+
+const TEMPLATE_PRESETS: TemplatePreset[] = [
+    { id: 'single-column', baseName: 'Single Column', creativeName: 'Atlas One', layout: 'Executive', font: 'Merriweather', density: 'Standard', accentColor: '#2563eb', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'polished', baseName: 'Polished', creativeName: 'Navy Crest', layout: 'Modern', font: 'Inter', density: 'Standard', accentColor: '#1e3a8a', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'timeline', baseName: 'Timeline', creativeName: 'Chronicle Flow', layout: 'Swiss', font: 'Inter', density: 'Standard', accentColor: '#1d4ed8', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'contemporary', baseName: 'Contemporary', creativeName: 'Mint Horizon', layout: 'Creative', font: 'Lora', density: 'Comfortable', accentColor: '#10b981', pageSize: 'A4', targetPageCount: 2 },
+    { id: 'ivy-photo', baseName: 'Ivy League with Photo', creativeName: 'Scholars Portrait', layout: 'LaTeX', font: 'Merriweather', density: 'Standard', accentColor: '#1d4ed8', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'ivy-logos', baseName: 'Ivy League with Logos', creativeName: 'Harbor Ledger', layout: 'LaTeX', font: 'Georgia', density: 'Standard', accentColor: '#1e40af', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'double-column', baseName: 'Double Column', creativeName: 'Summit Grid', layout: 'Modern', font: 'Inter', density: 'Compact', accentColor: '#0ea5e9', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'ivy-league', baseName: 'Ivy League', creativeName: 'Oldstone', layout: 'LaTeX', font: 'Georgia', density: 'Standard', accentColor: '#111827', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'elegant', baseName: 'Elegant', creativeName: 'Teal Signature', layout: 'Swiss', font: 'Merriweather', density: 'Standard', accentColor: '#0f766e', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'creative', baseName: 'Creative', creativeName: 'Midnight Prism', layout: 'Creative', font: 'Lora', density: 'Comfortable', accentColor: '#1e3a8a', pageSize: 'A4', targetPageCount: 2 },
+    { id: 'stylish', baseName: 'Stylish', creativeName: 'Aurora Line', layout: 'Modern', font: 'Inter', density: 'Standard', accentColor: '#3b82f6', pageSize: 'A4', targetPageCount: 2 },
+    { id: 'modern', baseName: 'Modern', creativeName: 'Slate Pulse', layout: 'Modern', font: 'Inter', density: 'Standard', accentColor: '#2563eb', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'single-photo', baseName: 'Single Column with Photo', creativeName: 'Portrait Classic', layout: 'Executive', font: 'Merriweather', density: 'Standard', accentColor: '#1d4ed8', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'elegant-logos', baseName: 'Elegant with Logos', creativeName: 'Emerald Crest', layout: 'Swiss', font: 'Merriweather', density: 'Standard', accentColor: '#0f766e', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'double-logos', baseName: 'Double Column with Logos', creativeName: 'Boardroom Grid', layout: 'Modern', font: 'Inter', density: 'Compact', accentColor: '#2563eb', pageSize: 'Letter', targetPageCount: 2 },
+    { id: 'compact', baseName: 'Compact', creativeName: 'Breeze Compact', layout: 'Minimalist', font: 'Inter', density: 'Compact', accentColor: '#60a5fa', pageSize: 'A4', targetPageCount: 1 },
+    { id: 'timeline-logos', baseName: 'Timeline with Logos', creativeName: 'Milestone Ledger', layout: 'Swiss', font: 'Inter', density: 'Standard', accentColor: '#10b981', pageSize: 'A4', targetPageCount: 2 },
+    { id: 'classic', baseName: 'Classic', creativeName: 'Heritage Serif', layout: 'Executive', font: 'Georgia', density: 'Standard', accentColor: '#1d4ed8', pageSize: 'Letter', targetPageCount: 2 }
+];
 
 // --- RENDERERS ---
 
@@ -765,6 +798,8 @@ const CreativeLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeTh
 
 const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, onUpdate, onApplySuggestion, job }) => {
   const [showAppearance, setShowAppearance] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [brandingEnabled, setBrandingEnabled] = useState(true);
   const [scale, setScale] = useState(1); 
   const [suggestions, setSuggestions] = useState<PreviewSuggestion[]>([]);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
@@ -883,6 +918,23 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
       if (['JetBrains Mono', 'Courier New'].includes(theme.font)) return 'font-mono';
       return 'font-sans';
   };
+  const applyTemplatePreset = (preset: TemplatePreset) => {
+      updateTheme({
+          layout: preset.layout,
+          font: preset.font,
+          density: preset.density,
+          accentColor: preset.accentColor,
+          pageSize: preset.pageSize,
+          targetPageCount: preset.targetPageCount
+      });
+  };
+  const isPresetActive = (preset: TemplatePreset) => (
+      theme.layout === preset.layout &&
+      theme.font === preset.font &&
+      theme.density === preset.density &&
+      theme.pageSize === preset.pageSize &&
+      theme.targetPageCount === preset.targetPageCount
+  );
 
   return (
     <div className="w-full h-full flex flex-col bg-slate-100 relative">
@@ -891,6 +943,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
             <div className="flex items-center gap-4">
                 <button onClick={() => setShowAppearance(!showAppearance)} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${showAppearance ? 'bg-slate-900 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:text-slate-900'}`}>
                     <Palette className="w-4 h-4" /> Design Studio
+                </button>
+                <button onClick={() => setShowTemplateModal(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 text-slate-600 hover:text-slate-900 bg-white">
+                    <LayoutTemplate className="w-4 h-4" /> Template Gallery
                 </button>
                 <div className="h-6 w-px bg-slate-200"></div>
                 <div className="flex items-center gap-2">
@@ -910,6 +965,60 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                 {isDownloading ? 'Rendering...' : 'Download PDF'}
             </button>
         </div>
+
+        {showTemplateModal && (
+            <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                <div className="w-full max-w-4xl bg-white rounded-2xl border border-slate-200 shadow-2xl overflow-hidden">
+                    <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                        <h3 className="font-bold text-slate-900">Select a Template</h3>
+                        <button onClick={() => setShowTemplateModal(false)} className="text-slate-400 hover:text-slate-900">
+                            <X className="w-5 h-5" />
+                        </button>
+                    </div>
+                    <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[60vh] overflow-y-auto">
+                        {TEMPLATE_PRESETS.map(preset => (
+                            <button
+                                key={preset.id}
+                                onClick={() => applyTemplatePreset(preset)}
+                                className={`text-left border rounded-xl p-3 transition-all ${isPresetActive(preset) ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-slate-200 hover:border-slate-300'}`}
+                            >
+                                <div className="h-28 rounded-md border border-slate-200 bg-gradient-to-br from-slate-50 to-slate-100 mb-3 relative overflow-hidden">
+                                    <div className="absolute top-3 left-3 right-3 h-2 bg-slate-300 rounded"></div>
+                                    <div className="absolute top-8 left-3 w-2/5 bottom-3 bg-slate-200 rounded"></div>
+                                    <div className="absolute top-8 right-3 w-2/5 bottom-3 bg-slate-200 rounded"></div>
+                                </div>
+                                <div className="font-semibold text-sm text-slate-800">{preset.baseName}</div>
+                                <div className="text-xs text-slate-500 mt-0.5">{preset.creativeName}</div>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="px-5 py-4 border-t border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-600">Branding</span>
+                            <button
+                                onClick={() => setBrandingEnabled(v => !v)}
+                                className={`w-11 h-6 rounded-full relative transition-colors ${brandingEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                            >
+                                <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${brandingEnabled ? 'left-5' : 'left-0.5'}`}></span>
+                            </button>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-slate-600">Document size</span>
+                            <div className="flex bg-slate-100 p-1 rounded-lg">
+                                {['A4', 'Letter'].map(s => (
+                                    <button key={s} onClick={() => updateTheme({ pageSize: s as any })} className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${theme.pageSize === s ? 'bg-white shadow text-slate-900' : 'text-slate-500'}`}>
+                                        {s === 'Letter' ? 'US Letter' : s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <button onClick={() => setShowTemplateModal(false)} className="px-5 py-2 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-400">
+                            Continue Editing
+                        </button>
+                    </div>
+                </div>
+            </div>
+        )}
 
         {/* DESIGN STUDIO DRAWER */}
         {showAppearance && (
@@ -932,16 +1041,19 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                        <div className="space-y-4">
                            <h4 className="text-xs font-bold text-slate-400 uppercase">Premium Templates</h4>
                            <div className="grid grid-cols-1 gap-2">
-                               {['Executive', 'Minimalist', 'Creative', 'Academic', 'ATS', 'International', 'LaTeX', 'Modern', 'Startup', 'Swiss', 'Tech'].map((l) => (
+                               {TEMPLATE_PRESETS.map((preset) => (
                                    <button 
-                                        key={l} 
-                                        onClick={() => updateTheme({ layout: l as any })} 
+                                        key={preset.id} 
+                                        onClick={() => applyTemplatePreset(preset)} 
                                         className={`p-3 rounded-lg border text-sm font-bold transition-all text-left flex justify-between items-center ${
-                                            theme.layout === l ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
+                                            isPresetActive(preset) ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'border-slate-200 hover:border-slate-300 text-slate-600 bg-white'
                                         }`}
                                     >
-                                       {l}
-                                       {theme.layout === l && <Check className="w-4 h-4"/>}
+                                       <span className="flex flex-col">
+                                           <span>{preset.baseName}</span>
+                                           <span className="text-[11px] font-medium text-slate-500">{preset.creativeName}</span>
+                                       </span>
+                                       {isPresetActive(preset) && <Check className="w-4 h-4"/>}
                                    </button>
                                ))}
                            </div>
@@ -1036,7 +1148,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                 >
                     <div 
                         id="resume-preview-content" 
-                        className={`${getFontFamily()} antialiased`}
+                        className={`${getFontFamily()} antialiased relative`}
                         style={{ 
                             width: width, 
                             minHeight: minHeight, 
@@ -1066,6 +1178,9 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                         {/* Default Fallback */}
                         {!['Minimalist', 'Executive', 'Creative', 'Academic', 'International', 'ATS', 'LaTeX', 'Modern', 'Startup', 'Swiss', 'Tech'].includes(theme.layout) && (
                             <MinimalistLayout resume={optimizedResume} theme={theme} />
+                        )}
+                        {brandingEnabled && (
+                            <div className="absolute bottom-3 right-4 text-[10px] text-slate-400 font-semibold">Built with HUNJ</div>
                         )}
                     </div>
                 </div>

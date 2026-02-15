@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { UserProfile, CareerInsights, Application } from '../types';
+import { UserProfile, CareerInsights, Application, JobAnalysis } from '../types';
 import { generateCareerInsights } from '../services/geminiService';
+import JobRecommendations from './JobRecommendations';
 import { 
     ArrowRight, Target, TrendingUp, TrendingDown, Activity, Zap, 
     CheckCircle2, AlertCircle, BarChart3, Layers, Calendar, 
@@ -17,6 +18,7 @@ interface CareerOverviewProps {
   onFindJobs: () => void;
   onEditProfile: () => void;
   onUpdateProfile: (p: UserProfile) => void;
+  onAnalyzeJob?: (analysis: JobAnalysis, text: string) => void;
 }
 
 // --- SUB-COMPONENTS ---
@@ -80,7 +82,7 @@ const InsightCard = ({ title, desc, action, type }: { title: string, desc: strin
 
 // --- MAIN COMPONENT ---
 
-const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToApp, onFindJobs, onEditProfile, onUpdateProfile }) => {
+const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToApp, onFindJobs, onEditProfile, onUpdateProfile, onAnalyzeJob }) => {
   const [insights, setInsights] = useState<CareerInsights | null>(null);
   const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
@@ -95,7 +97,46 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
   const offerRate = Math.round((offers.length / totalApps) * 100);
   
   const weeklyGoal = 10;
-  const weeklyProgress = 4; // Mocked for demo (would be calculated from dates)
+  const weeklyProgress = apps.filter(a => {
+      const created = new Date(a.dateCreated).getTime();
+      return created >= Date.now() - (7 * 24 * 60 * 60 * 1000);
+  }).length;
+  const networkingGoal = 3;
+  const networkingProgress = profile.dailyGoals?.filter(g => /connect|network/i.test(g.text) && g.completed).length || 0;
+  const avgATS = apps.length > 0
+      ? Math.round(apps.reduce((sum, app) => sum + (app.atsScore?.total || 0), 0) / apps.length)
+      : 0;
+  const resumeStrength = avgATS > 0
+      ? avgATS
+      : Math.min(100, 20 + (profile.masterResume.skills.length * 4) + (profile.masterResume.experience.length * 8));
+  const marketMatch = Math.max(0, Math.min(100, insights?.resumeStrength || Math.round(
+      apps.length > 0
+          ? apps.reduce((sum, app) => sum + (app.jobAnalysis?.hiringProbability || 50), 0) / apps.length
+          : 50
+  )));
+  const reviewedCount = apps.filter(a => ['Applied', 'Interviewing', 'Offer', 'Rejected'].includes(a.status)).length;
+  const insightCards = [
+      {
+          title: 'Optimization Opportunity',
+          desc: insights?.recommendedAction || 'Improve summary specificity and quantified outcomes to increase screening quality.',
+          action: 'View Analysis',
+          type: 'opportunity' as const
+      },
+      {
+          title: 'Keyword Gap',
+          desc: (insights?.missingSkills?.length || 0) > 0
+              ? `Missing skills detected: ${(insights?.missingSkills || []).slice(0, 2).join(', ')}.`
+              : 'No major keyword gaps detected in the current profile baseline.',
+          action: 'Fix Resume',
+          type: (insights?.missingSkills?.length || 0) > 0 ? 'risk' as const : 'success' as const
+      },
+      {
+          title: 'Momentum',
+          desc: `${weeklyProgress} applications this week with ${interviewRate}% interview conversion.`,
+          action: 'See Details',
+          type: interviewRate >= 15 ? 'success' as const : 'opportunity' as const
+      }
+  ];
 
   useEffect(() => {
       const fetchInsights = async () => {
@@ -110,24 +151,31 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
           }
       };
       if (profile.masterResume.skills.length > 0) fetchInsights();
-  }, []);
+  }, [profile.masterResume.skills.length, profile.masterResume.experience.length, apps.length]);
 
   // --- CHARTS DATA ---
   
   const funnelData = [
       { name: 'Applied', value: apps.length, fill: '#64748b' },
-      { name: 'Reviewed', value: Math.floor(apps.length * 0.6), fill: '#3b82f6' },
+      { name: 'Reviewed', value: reviewedCount, fill: '#3b82f6' },
       { name: 'Interview', value: interviews.length, fill: '#8b5cf6' },
       { name: 'Offer', value: offers.length, fill: '#10b981' },
   ];
 
+  const leadershipMentions = profile.masterResume.experience.flatMap(e => e.bullets).filter(b => /(led|managed|owned|mentored|coordinated)/i.test(b.text)).length;
+  const quantifiedBullets = profile.masterResume.experience.flatMap(e => e.bullets).filter(b => /(\d+%|\$\d+|\d+[xX])/.test(b.text)).length;
+  const totalBullets = Math.max(1, profile.masterResume.experience.flatMap(e => e.bullets).length);
   const radarData = [
-      { subject: 'Tech Skills', A: 85, fullMark: 100 },
-      { subject: 'Leadership', A: 45, fullMark: 100 },
-      { subject: 'Impact', A: 60, fullMark: 100 },
-      { subject: 'Education', A: 90, fullMark: 100 },
-      { subject: 'Market Fit', A: 75, fullMark: 100 },
+      { subject: 'Tech Skills', A: Math.min(100, profile.masterResume.skills.length * 8), fullMark: 100 },
+      { subject: 'Leadership', A: Math.min(100, leadershipMentions * 14), fullMark: 100 },
+      { subject: 'Impact', A: Math.min(100, Math.round((quantifiedBullets / totalBullets) * 100)), fullMark: 100 },
+      { subject: 'Education', A: profile.masterResume.education.trim().length > 40 ? 85 : profile.masterResume.education.trim().length > 5 ? 65 : 30, fullMark: 100 },
+      { subject: 'Market Fit', A: marketMatch, fullMark: 100 },
   ];
+  const impactSeries = apps
+      .slice(0, 7)
+      .map((app) => app.atsScore?.total || 40)
+      .reverse();
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -136,8 +184,8 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
         <div className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200 shadow-sm transition-all">
             <div className="max-w-[1600px] mx-auto px-4 sm:px-6 h-20 flex items-center justify-between overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-6">
-                    <StatusMetric label="Resume Strength" value={84} trend="up" />
-                    <StatusMetric label="Market Match" value={76} sub="%" />
+                    <StatusMetric label="Resume Strength" value={resumeStrength} trend={resumeStrength >= 70 ? 'up' : 'down'} />
+                    <StatusMetric label="Market Match" value={marketMatch} sub="%" trend={marketMatch >= 70 ? 'up' : 'down'} />
                     <StatusMetric label="Interview Rate" value={interviewRate} sub="%" trend={interviewRate > 10 ? 'up' : 'down'} />
                     <StatusMetric label="Active Pipeline" value={activeApps.length} />
                 </div>
@@ -145,7 +193,7 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                 <div className="flex items-center gap-4 pl-6 border-l border-slate-200">
                     <div className="text-right hidden md:block">
                         <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Momentum</div>
-                        <div className="text-sm font-bold text-slate-900">High Velocity</div>
+                        <div className="text-sm font-bold text-slate-900">{weeklyProgress >= 5 ? 'High Velocity' : weeklyProgress >= 2 ? 'Building' : 'Needs Action'}</div>
                     </div>
                     <div className="w-10 h-10 rounded-full bg-green-100 border border-green-200 flex items-center justify-center">
                         <Activity className="w-5 h-5 text-green-600 animate-pulse" />
@@ -193,30 +241,18 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                             <Sparkles className="w-4 h-4 text-hunj-400" /> Strategic Intel
                         </h3>
                         <div className="space-y-3 relative z-10">
-                            <InsightCard 
-                                title="Optimization Opportunity" 
-                                desc="Your fintech-targeted resumes convert 22% higher than SaaS roles." 
-                                action="View Analysis"
-                                type="opportunity"
-                            />
-                            <InsightCard 
-                                title="Keyword Gap" 
-                                desc="Missing 'System Design' keywords for Senior roles." 
-                                action="Fix Resume"
-                                type="risk"
-                            />
-                            <InsightCard 
-                                title="Momentum" 
-                                desc="Response rate is up 12% this week." 
-                                action="See Details"
-                                type="success"
-                            />
+                            {insightCards.map(card => (
+                                <InsightCard key={card.title} title={card.title} desc={card.desc} action={card.action} type={card.type} />
+                            ))}
                         </div>
                     </div>
                 </div>
 
                 {/* 3. CENTER COLUMN: INTELLIGENCE (Col-6) */}
                 <div className="lg:col-span-6 space-y-6">
+                    {onAnalyzeJob && (
+                        <JobRecommendations masterResume={profile.masterResume} onApply={onAnalyzeJob} />
+                    )}
                     
                     {/* Pipeline Funnel */}
                     <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
@@ -226,8 +262,12 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                                 <p className="text-xs text-slate-500">Conversion efficiency per stage</p>
                             </div>
                             <div className="flex gap-2">
-                                <span className="text-xs font-bold px-2 py-1 bg-blue-50 text-blue-600 rounded">Tech</span>
-                                <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded">Finance</span>
+                                {(profile.preferences.targetIndustries || []).slice(0, 2).map(ind => (
+                                    <span key={ind} className="text-xs font-bold px-2 py-1 bg-blue-50 text-blue-600 rounded">{ind}</span>
+                                ))}
+                                {(profile.preferences.targetIndustries || []).length === 0 && (
+                                    <span className="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-500 rounded">General</span>
+                                )}
                             </div>
                         </div>
                         
@@ -260,12 +300,16 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                                 <BarChart3 className="w-4 h-4 text-slate-400" /> Resume Impact
                             </h3>
                             <div className="h-32 flex items-end gap-1">
-                                {[45, 60, 75, 82, 68, 90, 85].map((val, i) => (
+                                {impactSeries.length > 0 ? impactSeries.map((val, i) => (
                                     <div key={i} className="flex-1 bg-slate-100 rounded-t-sm relative group overflow-hidden">
                                         <div 
                                             className="absolute bottom-0 left-0 w-full bg-hunj-500 transition-all duration-1000 group-hover:bg-hunj-400" 
                                             style={{ height: `${val}%` }}
                                         ></div>
+                                    </div>
+                                )) : [50, 50, 50, 50, 50, 50, 50].map((val, i) => (
+                                    <div key={i} className="flex-1 bg-slate-100 rounded-t-sm relative group overflow-hidden">
+                                        <div className="absolute bottom-0 left-0 w-full bg-hunj-300" style={{ height: `${val}%` }}></div>
                                     </div>
                                 ))}
                             </div>
@@ -279,14 +323,14 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                             <div className="relative w-32 h-32 mb-4">
                                 <svg className="w-full h-full transform -rotate-90">
                                     <circle cx="64" cy="64" r="60" stroke="#f1f5f9" strokeWidth="8" fill="transparent" />
-                                    <circle cx="64" cy="64" r="60" stroke="#10b981" strokeWidth="8" fill="transparent" strokeDasharray={377} strokeDashoffset={377 - (377 * 0.76)} className="transition-all duration-1000 ease-out" />
+                                    <circle cx="64" cy="64" r="60" stroke="#10b981" strokeWidth="8" fill="transparent" strokeDasharray={377} strokeDashoffset={377 - (377 * (marketMatch / 100))} className="transition-all duration-1000 ease-out" />
                                 </svg>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="text-3xl font-bold text-slate-900">76</span>
+                                    <span className="text-3xl font-bold text-slate-900">{marketMatch}</span>
                                     <span className="text-[10px] text-slate-400 uppercase font-bold">Market Fit</span>
                                 </div>
                             </div>
-                            <p className="text-xs text-slate-500 max-w-[150px]">Your profile aligns with <strong className="text-slate-900">Senior DevOps</strong> requirements.</p>
+                            <p className="text-xs text-slate-500 max-w-[180px]">Your profile aligns with <strong className="text-slate-900">{profile.preferences.targetRoles?.[0] || 'target role'}</strong> requirements.</p>
                         </div>
                     </div>
                 </div>
@@ -306,16 +350,16 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                                     <span className="text-slate-400">{weeklyProgress}/{weeklyGoal}</span>
                                 </div>
                                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-hunj-500 h-full rounded-full" style={{ width: '40%' }}></div>
+                                    <div className="bg-hunj-500 h-full rounded-full" style={{ width: `${Math.min(100, Math.round((weeklyProgress / weeklyGoal) * 100))}%` }}></div>
                                 </div>
                             </div>
                             <div>
                                 <div className="flex justify-between text-xs mb-1">
                                     <span className="font-bold text-slate-600">Networking</span>
-                                    <span className="text-slate-400">1/3</span>
+                                    <span className="text-slate-400">{networkingProgress}/{networkingGoal}</span>
                                 </div>
                                 <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className="bg-accent-500 h-full rounded-full" style={{ width: '33%' }}></div>
+                                    <div className="bg-accent-500 h-full rounded-full" style={{ width: `${Math.min(100, Math.round((networkingProgress / networkingGoal) * 100))}%` }}></div>
                                 </div>
                             </div>
                         </div>
@@ -343,9 +387,9 @@ const CareerOverview: React.FC<CareerOverviewProps> = ({ profile, onNavigateToAp
                             <Crosshair className="w-3 h-3" /> Positioning
                         </h3>
                         <div className="flex flex-wrap gap-2">
-                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">Senior Level</span>
-                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">Remote</span>
-                            <span className="px-3 py-1 bg-hunj-600 text-white text-xs font-bold rounded-lg border border-hunj-500 shadow-glow">Top 10% Match</span>
+                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">{profile.preferences.targetRoles?.[0] || 'Role Targeting'}</span>
+                            <span className="px-3 py-1 bg-devops-800 text-white text-xs font-bold rounded-lg border border-devops-700">{profile.preferences.remotePreference || 'Work Mode'}</span>
+                            <span className="px-3 py-1 bg-hunj-600 text-white text-xs font-bold rounded-lg border border-hunj-500 shadow-glow">{marketMatch >= 80 ? 'Top 20% Match' : 'Improving Match'}</span>
                         </div>
                         <button onClick={onEditProfile} className="w-full mt-4 py-2 bg-devops-800 hover:bg-devops-700 text-devops-300 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-2">
                             Adjust Settings <MoveRight className="w-3 h-3" />

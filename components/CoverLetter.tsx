@@ -25,6 +25,24 @@ const CoverLetterEditor: React.FC<CoverLetterProps> = ({ resume, job, currentLet
     }
   };
 
+  const handleCopy = async () => {
+    if (!currentLetter?.content) return;
+    await navigator.clipboard.writeText(currentLetter.content);
+  };
+
+  const handleDownload = () => {
+    if (!currentLetter?.content) return;
+    const blob = new Blob([currentLetter.content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${job.company}-${job.title}-cover-letter.txt`.replace(/\s+/g, '-').toLowerCase();
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="bg-devops-800 rounded-xl border border-devops-700 shadow-xl overflow-hidden h-full flex flex-col">
       <div className="p-4 border-b border-devops-700 flex justify-between items-center bg-devops-900/50">
@@ -70,11 +88,11 @@ const CoverLetterEditor: React.FC<CoverLetterProps> = ({ resume, job, currentLet
       
       {currentLetter && (
         <div className="p-4 border-t border-devops-700 bg-devops-900/50 flex justify-end gap-3">
-             <button className="flex items-center gap-2 px-4 py-2 text-devops-300 hover:text-white transition-colors">
+             <button onClick={handleCopy} className="flex items-center gap-2 px-4 py-2 text-devops-300 hover:text-white transition-colors">
                 <Copy className="w-4 h-4" /> Copy
              </button>
-             <button className="flex items-center gap-2 px-4 py-2 bg-devops-700 text-white rounded-lg hover:bg-devops-600 transition-colors">
-                <Download className="w-4 h-4" /> Download PDF
+             <button onClick={handleDownload} className="flex items-center gap-2 px-4 py-2 bg-devops-700 text-white rounded-lg hover:bg-devops-600 transition-colors">
+                <Download className="w-4 h-4" /> Download Text
              </button>
         </div>
       )}
