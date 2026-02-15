@@ -74,6 +74,7 @@ const INITIAL_RESUME: ResumeData = {
   awards: [],
   interests: [],
   strengths: [],
+  personalKnowledgeBase: [],
   education: '',
   educationVisible: true,
   experience: [],
@@ -288,8 +289,10 @@ const App: React.FC = () => {
               analyzeSkillsGap(inputResume.skills, analysis.requiredSkills)
           ]);
       } else {
+          // Construct temp profile for generation to support both signatures (privacy respected via inputResume in temp object)
+          const tempProfile: UserProfile = { ...profile, masterResume: inputResume };
           [tailoredResumes, skillsResult] = await Promise.all([
-              generateTailoredResume(inputResume, analysis),
+              generateTailoredResume(tempProfile, analysis),
               analyzeSkillsGap(inputResume.skills, analysis.requiredSkills)
           ]);
       }
@@ -664,7 +667,7 @@ const App: React.FC = () => {
         <div className="md:hidden fixed bottom-0 left-0 w-full bg-slate-900 border-t border-slate-800 flex justify-around items-center h-16 z-[60] shadow-lg">
             <button onClick={() => { setView('home'); setActiveAppId(null); }} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'home' ? 'text-blue-400' : 'text-slate-400'}`}><Home className="w-5 h-5" /><span className="text-[10px] font-medium">Home</span></button>
             <button onClick={() => { setView('apps'); setActiveAppId(null); }} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'apps' ? 'text-blue-400' : 'text-slate-400'}`}><LayoutGrid className="w-5 h-5" /><span className="text-[10px] font-medium">Apps</span></button>
-            <button onClick={() => setView('job-board')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'job-board' ? 'text-blue-400' : 'text-slate-400'}`}><Globe className="w-5 h-5" /><span className="text-[10px] font-medium">Jobs</span></button>
+            <button onClick={() => { setView('job-board')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'job-board' ? 'text-blue-400' : 'text-slate-400'}`}><Globe className="w-5 h-5" /><span className="text-[10px] font-medium">Jobs</span></button>
             <button onClick={() => setView('profile')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'profile' ? 'text-blue-400' : 'text-slate-400'}`}><Users className="w-5 h-5" /><span className="text-[10px] font-medium">Profile</span></button>
         </div>
       )}

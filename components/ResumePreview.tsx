@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { ResumeData, ResumeThemeConfig, PreviewSuggestion, JobAnalysis, TemplateRecommendation, ResumeLayout } from '../types';
 import { generatePreviewSuggestions, recommendTemplate } from '../services/geminiService';
-import { Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Phone, Mail, MapPin, Globe, Linkedin, LayoutTemplate, Type, Eye, MoveUp, MoveDown, Grid2X2, AlignLeft, BookOpen, Layers, Settings, EyeOff, FileText, GripVertical } from 'lucide-react';
+import { Palette, Download, ZoomIn, ZoomOut, Wand2, Sparkles, Loader2, Check, Phone, Mail, MapPin, Globe, Linkedin, LayoutTemplate, Type, Eye, MoveUp, MoveDown, Grid2X2, AlignLeft, BookOpen, Layers, Settings, EyeOff, FileText, GripVertical, Terminal, Hash, Command } from 'lucide-react';
 
 declare var html2pdf: any;
 
@@ -62,8 +62,348 @@ const ImpactHighlighter = ({ text }: { text: string }) => {
     );
 };
 
-// --- MINIMALIST LAYOUT ---
-const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig }) => {
+// --- LATEX LAYOUT ---
+const LatexLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const renderSectionContent = (sectionName: string) => {
+        if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
+        const SectionHeader = ({ title }: { title: string }) => (
+            <div className="border-b border-black mb-3 pb-1 mt-4">
+                <h3 className="font-serif font-bold uppercase text-sm tracking-wide text-black">{title}</h3>
+            </div>
+        );
+
+        switch(sectionName) {
+            case 'summary': return resume.summary ? <div><SectionHeader title="Professional Summary" /><p className="text-justify text-sm leading-snug">{resume.summary}</p></div> : null;
+            case 'experience': return resume.experience.length > 0 ? (
+                <div>
+                    <SectionHeader title="Experience" />
+                    <div className="space-y-4">
+                        {resume.experience.filter(e => e.visible !== false).map((e, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between items-baseline font-serif">
+                                    <div className="font-bold text-base">{e.company}</div>
+                                    <div className="italic text-sm">{e.location}</div>
+                                </div>
+                                <div className="flex justify-between items-baseline mb-1">
+                                    <div className="italic text-sm">{e.role}</div>
+                                    <div className="text-sm font-medium">{e.period}</div>
+                                </div>
+                                <ul className="list-disc ml-5 space-y-0.5 text-sm">
+                                    {e.bullets.filter(b => b.visible !== false).map(b => <li key={b.id}><ImpactHighlighter text={b.text}/></li>)}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null;
+            case 'education': return resume.education ? <div><SectionHeader title="Education" /><div className="whitespace-pre-wrap text-sm">{resume.education}</div></div> : null;
+            case 'skills': return resume.skills.length > 0 ? <div><SectionHeader title="Technical Skills" /><div className="text-sm">{resume.skills.join(' • ')}</div></div> : null;
+            case 'projects': return resume.projects.length > 0 ? (
+                <div>
+                    <SectionHeader title="Projects" />
+                    <div className="space-y-2">
+                        {resume.projects.map((p,i) => (
+                            <div key={i}>
+                                <div className="flex justify-between font-bold text-sm"><span>{p.name}</span>{p.link && <span className="font-normal font-mono text-xs">{p.link}</span>}</div>
+                                <p className="text-sm">{p.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null;
+            default: return null;
+        }
+    };
+
+    return (
+        <div className="h-full p-12 bg-white text-black font-serif leading-relaxed" style={{ fontFamily: '"Times New Roman", Times, serif' }}>
+            <div className="text-center mb-6">
+                <h1 className="text-3xl font-bold mb-2 uppercase tracking-wider">{resume.fullName}</h1>
+                <div className="text-sm flex justify-center gap-4 flex-wrap">
+                    {resume.email} {resume.phone && `• ${resume.phone}`} {resume.linkedin && `• ${resume.linkedin.replace(/^https?:\/\//,'')}`} {resume.location && `• ${resume.location}`}
+                </div>
+            </div>
+            {resume.sectionOrder.map(s => <React.Fragment key={s}>{renderSectionContent(s)}</React.Fragment>)}
+        </div>
+    );
+};
+
+// --- MODERN LAYOUT ---
+const ModernLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const sidebarSections = ['contact', 'skills', 'education', 'languages', 'awards', 'certifications'];
+    const mainSections = ['summary', 'experience', 'projects'];
+
+    const renderSidebar = (section: string) => {
+        if (resume.visibleSections[section] === false) return null;
+        switch(section) {
+            case 'contact': return (
+                <div className="mb-8 text-xs space-y-2 text-slate-400">
+                    {resume.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3"/> {resume.email}</div>}
+                    {resume.phone && <div className="flex items-center gap-2"><Phone className="w-3 h-3"/> {resume.phone}</div>}
+                    {resume.location && <div className="flex items-center gap-2"><MapPin className="w-3 h-3"/> {resume.location}</div>}
+                    {resume.linkedin && <div className="flex items-center gap-2"><Linkedin className="w-3 h-3"/> {resume.linkedin.replace(/^https?:\/\//, '')}</div>}
+                </div>
+            );
+            case 'skills': return resume.skills.length ? (
+                <div className="mb-8">
+                    <h4 className="font-bold text-white uppercase tracking-widest text-xs mb-4 border-b border-slate-700 pb-2">Skills</h4>
+                    <div className="flex flex-wrap gap-2">
+                        {resume.skills.map((s,i) => <span key={i} className="bg-slate-800 text-slate-300 text-[10px] px-2 py-1 rounded">{s}</span>)}
+                    </div>
+                </div>
+            ) : null;
+            case 'education': return resume.education ? (
+                <div className="mb-8">
+                    <h4 className="font-bold text-white uppercase tracking-widest text-xs mb-4 border-b border-slate-700 pb-2">Education</h4>
+                    <div className="text-xs text-slate-400 whitespace-pre-wrap">{resume.education}</div>
+                </div>
+            ) : null;
+            case 'certifications': return resume.certifications.length ? (
+                <div className="mb-8">
+                    <h4 className="font-bold text-white uppercase tracking-widest text-xs mb-4 border-b border-slate-700 pb-2">Certifications</h4>
+                    <div className="space-y-2 text-xs text-slate-400">{resume.certifications.map((c,i)=><div key={i}>{c.name}</div>)}</div>
+                </div>
+            ) : null;
+            default: return null;
+        }
+    }
+
+    const renderMain = (section: string) => {
+        if (resume.visibleSections[section] === false) return null;
+        const Title = ({ t }: { t: string }) => <h3 className="text-xl font-bold text-slate-800 mb-4 pb-2 border-b-2 border-slate-100 flex items-center gap-2"><span className="w-2 h-2 bg-indigo-600 rounded-full"></span>{t}</h3>;
+        
+        switch(section) {
+            case 'summary': return resume.summary ? <div className="mb-8"><Title t="Profile" /><p className="text-sm text-slate-600 leading-relaxed">{resume.summary}</p></div> : null;
+            case 'experience': return resume.experience.length ? (
+                <div className="mb-8">
+                    <Title t="Experience" />
+                    <div className="space-y-6">
+                        {resume.experience.filter(e=>e.visible!==false).map((e,i)=>(
+                            <div key={i} className="relative pl-4 border-l-2 border-slate-200">
+                                <div className="absolute -left-[5px] top-1.5 w-2 h-2 bg-white border-2 border-indigo-600 rounded-full"></div>
+                                <div className="flex justify-between items-baseline mb-1">
+                                    <h4 className="font-bold text-slate-900">{e.role}</h4>
+                                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">{e.period}</span>
+                                </div>
+                                <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">{e.company}</div>
+                                <ul className="list-disc ml-4 text-sm text-slate-600 space-y-1">
+                                    {e.bullets.filter(b=>b.visible!==false).map(b=><li key={b.id}>{b.text}</li>)}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null;
+            case 'projects': return resume.projects.length ? (
+                <div className="mb-8"><Title t="Projects" /><div className="grid grid-cols-2 gap-4">{resume.projects.map((p,i)=><div key={i} className="bg-slate-50 p-3 rounded border border-slate-100"><div className="font-bold text-sm text-slate-900">{p.name}</div><p className="text-xs text-slate-500 mt-1">{p.description}</p></div>)}</div></div>
+            ) : null;
+            default: return null;
+        }
+    }
+
+    return (
+        <div className="flex h-full font-sans">
+            <div className="w-[35%] bg-slate-900 text-white p-8 pt-12">
+                <div className="mb-10">
+                    <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-3xl font-bold mb-4 shadow-xl shadow-indigo-900/50">{resume.fullName.charAt(0)}</div>
+                    <h1 className="text-3xl font-bold leading-tight mb-2">{resume.fullName}</h1>
+                    <p className="text-indigo-400 font-medium">{resume.role}</p>
+                </div>
+                {sidebarSections.map(s => <React.Fragment key={s}>{renderSidebar(s)}</React.Fragment>)}
+            </div>
+            <div className="flex-1 bg-white p-10 pt-12">
+                {mainSections.map(s => <React.Fragment key={s}>{renderMain(s)}</React.Fragment>)}
+                {resume.sectionOrder.filter(s => !sidebarSections.includes(s) && !mainSections.includes(s)).map(s => <React.Fragment key={s}>{renderMain(s)}</React.Fragment>)}
+            </div>
+        </div>
+    );
+};
+
+// --- STARTUP LAYOUT ---
+const StartupLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const renderContent = (section: string) => {
+        if (resume.visibleSections[section] === false) return null;
+        const H3 = ({children}:any) => <h3 className="font-display font-bold text-lg text-slate-900 mb-3 uppercase tracking-tighter flex items-center gap-2"><Sparkles className="w-4 h-4 text-pink-500"/> {children}</h3>;
+        
+        switch(section) {
+            case 'summary': return resume.summary ? <div className="mb-8"><p className="text-lg font-medium text-slate-700 leading-relaxed border-l-4 border-pink-500 pl-4">{resume.summary}</p></div> : null;
+            case 'experience': return resume.experience.length ? (
+                <div className="mb-10">
+                    <H3>Work History</H3>
+                    <div className="space-y-8">
+                        {resume.experience.filter(e=>e.visible!==false).map((e,i)=>(
+                            <div key={i}>
+                                <div className="flex items-center gap-3 mb-2">
+                                    <h4 className="text-xl font-bold text-slate-900">{e.company}</h4>
+                                    <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-xs font-bold font-mono">{e.period}</span>
+                                </div>
+                                <div className="text-pink-600 font-bold text-sm mb-2">{e.role}</div>
+                                <div className="space-y-2">
+                                    {e.bullets.filter(b=>b.visible!==false).map(b=><div key={b.id} className="flex gap-2 text-sm text-slate-600"><span className="text-pink-300 font-bold">→</span><span><ImpactHighlighter text={b.text}/></span></div>)}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : null;
+            case 'skills': return resume.skills.length ? <div className="mb-10"><H3>Stack</H3><div className="flex flex-wrap gap-2">{resume.skills.map((s,i)=><span key={i} className="border-2 border-slate-900 text-slate-900 px-3 py-1 font-bold text-xs rounded-full hover:bg-slate-900 hover:text-white transition-colors">{s}</span>)}</div></div> : null;
+            default: return null;
+        }
+    }
+
+    return (
+        <div className="h-full bg-white p-12 font-sans selection:bg-pink-200">
+            <header className="mb-12 border-b-4 border-black pb-8">
+                <h1 className="text-6xl font-display font-black text-slate-900 mb-2 tracking-tighter">{resume.fullName.toUpperCase()}</h1>
+                <div className="flex justify-between items-end">
+                    <div className="text-xl font-bold text-pink-600 font-display">{resume.role}</div>
+                    <div className="text-right font-mono text-xs font-bold text-slate-500">
+                        {resume.email}<br/>{resume.phone}<br/>{resume.location}
+                    </div>
+                </div>
+            </header>
+            <div className="grid grid-cols-1 gap-4">
+                {resume.sectionOrder.map(s => <React.Fragment key={s}>{renderContent(s)}</React.Fragment>)}
+            </div>
+        </div>
+    );
+};
+
+// --- SWISS LAYOUT ---
+const SwissLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const renderGridSection = (title: string, content: React.ReactNode) => (
+        <div className="grid grid-cols-[160px_1fr] gap-8 mb-10 items-start">
+            <h3 className="font-bold text-sm uppercase tracking-widest text-slate-900 text-right pt-1">{title}</h3>
+            <div>{content}</div>
+        </div>
+    );
+
+    const renderContent = (section: string) => {
+        if (resume.visibleSections[section] === false) return null;
+        switch(section) {
+            case 'summary': return resume.summary ? renderGridSection('Profile', <p className="text-sm font-medium leading-relaxed text-slate-800">{resume.summary}</p>) : null;
+            case 'experience': return resume.experience.length ? renderGridSection('Experience', (
+                <div className="space-y-8">
+                    {resume.experience.filter(e=>e.visible!==false).map((e,i)=>(
+                        <div key={i}>
+                            <div className="flex justify-between items-baseline mb-1">
+                                <h4 className="font-bold text-slate-900 text-base">{e.role}</h4>
+                                <span className="text-xs font-medium text-slate-500">{e.period}</span>
+                            </div>
+                            <div className="text-sm text-slate-600 mb-2">{e.company}</div>
+                            <ul className="text-sm text-slate-700 space-y-1 list-square ml-4 marker:text-red-500">
+                                {e.bullets.filter(b=>b.visible!==false).map(b=><li key={b.id}>{b.text}</li>)}
+                            </ul>
+                        </div>
+                    ))}
+                </div>
+            )) : null;
+            case 'education': return resume.education ? renderGridSection('Education', <div className="text-sm whitespace-pre-wrap">{resume.education}</div>) : null;
+            case 'skills': return resume.skills.length ? renderGridSection('Skills', <div className="text-sm font-medium leading-loose">{resume.skills.join(', ')}</div>) : null;
+            default: return null;
+        }
+    }
+
+    return (
+        <div className="h-full bg-white p-12 font-sans text-slate-900">
+            <header className="grid grid-cols-[160px_1fr] gap-8 mb-16 items-end">
+                <div className="w-12 h-12 bg-red-600 text-white flex items-center justify-center font-bold text-xl ml-auto">
+                    {resume.fullName.substring(0,2).toUpperCase()}
+                </div>
+                <div>
+                    <h1 className="text-5xl font-bold tracking-tight mb-2 leading-none">{resume.fullName}</h1>
+                    <p className="text-xl text-slate-500 mb-4">{resume.role}</p>
+                    <div className="flex gap-6 text-xs font-bold uppercase tracking-wide text-slate-400">
+                        {resume.email && <span>{resume.email}</span>}
+                        {resume.location && <span>{resume.location}</span>}
+                        {resume.linkedin && <span>LinkedIn</span>}
+                    </div>
+                </div>
+            </header>
+            {resume.sectionOrder.map(s => <React.Fragment key={s}>{renderContent(s)}</React.Fragment>)}
+        </div>
+    );
+};
+
+// --- TECH LAYOUT ---
+const TechLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const Green = ({children}:any) => <span className="text-green-400">{children}</span>;
+    const Blue = ({children}:any) => <span className="text-blue-400">{children}</span>;
+    const Yellow = ({children}:any) => <span className="text-yellow-400">{children}</span>;
+
+    const renderContent = (section: string) => {
+        if (resume.visibleSections[section] === false) return null;
+        switch(section) {
+            case 'summary': return resume.summary ? (
+                <div className="mb-6 font-mono text-xs">
+                    <div className="text-slate-500 mb-1">/** Profile */</div>
+                    <div className="text-slate-300 pl-4 border-l border-slate-800">{resume.summary}</div>
+                </div>
+            ) : null;
+            case 'skills': return resume.skills.length ? (
+                <div className="mb-6 font-mono text-xs">
+                    <div className="text-slate-500 mb-1">const <Yellow>stack</Yellow> = [</div>
+                    <div className="pl-4 flex flex-wrap gap-2 py-1">
+                        {resume.skills.map((s,i) => <span key={i} className="text-green-300">"{s}"{i<resume.skills.length-1 && ','}</span>)}
+                    </div>
+                    <div className="text-slate-500">];</div>
+                </div>
+            ) : null;
+            case 'experience': return resume.experience.length ? (
+                <div className="mb-6 font-mono text-xs">
+                    <div className="text-slate-500 mb-2">function <Blue>experience</Blue>() {'{'}</div>
+                    <div className="pl-4 space-y-4 border-l border-slate-800 ml-1">
+                        {resume.experience.filter(e=>e.visible!==false).map((e,i)=>(
+                            <div key={i}>
+                                <div className="flex gap-2">
+                                    <span className="text-purple-400">return</span>
+                                    <span className="text-yellow-300">{`{`}</span>
+                                </div>
+                                <div className="pl-4">
+                                    <div>role: <Green>"{e.role}"</Green>,</div>
+                                    <div>company: <Green>"{e.company}"</Green>,</div>
+                                    <div>period: <Green>"{e.period}"</Green>,</div>
+                                    <div>impact: [</div>
+                                    <div className="pl-4 text-slate-400">
+                                        {e.bullets.filter(b=>b.visible!==false).map(b=><div key={b.id}>"{b.text}",</div>)}
+                                    </div>
+                                    <div>]</div>
+                                </div>
+                                <div className="text-yellow-300">{`};`}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="text-slate-500">{'}'}</div>
+                </div>
+            ) : null;
+            default: return null;
+        }
+    }
+
+    return (
+        <div className="h-full bg-[#1e1e1e] text-slate-300 p-8 font-mono text-xs overflow-hidden">
+            <div className="border-b border-slate-700 pb-4 mb-6">
+                <h1 className="text-2xl font-bold text-green-400 mb-1">~/{resume.fullName.replace(/\s+/g,'_').toLowerCase()}</h1>
+                <div className="text-slate-500">
+                    <span className="text-blue-400">git branch:</span> main <span className="mx-2">|</span> {resume.role}
+                </div>
+                <div className="mt-2 flex gap-4 text-[10px]">
+                    <span>{resume.email}</span>
+                    <span>{resume.phone}</span>
+                    <span>{resume.location}</span>
+                </div>
+            </div>
+            {resume.sectionOrder.map(s => <React.Fragment key={s}>{renderContent(s)}</React.Fragment>)}
+            <div className="mt-8 pt-4 border-t border-slate-700 text-slate-600 flex items-center gap-2">
+                <Terminal className="w-3 h-3" />
+                <span className="animate-pulse">_</span>
+            </div>
+        </div>
+    );
+};
+
+// --- MINIMALIST LAYOUT (Original) ---
+const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
     const isOnePage = theme.targetPageCount === 1;
     const isThreePage = theme.targetPageCount === 3;
 
@@ -73,7 +413,6 @@ const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: Resume
     const sectionHeaderSize = theme.density === 'Compact' || isOnePage ? 'text-xs mb-2' : 'text-sm mb-3';
 
     const renderSectionContent = (sectionName: string) => {
-        // Strict check for false. Undefined means visible.
         if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
 
         switch(sectionName) {
@@ -213,7 +552,6 @@ const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: Resume
         }
     };
 
-    // Robust ordering: merge explicit order with any missing sections to ensure nothing is lost
     const sectionOrder = useMemo(() => {
         const baseOrder = resume.sectionOrder || [];
         const allPossible = ['summary', 'experience', 'education', 'projects', 'certifications', 'skills', 'languages', 'awards', 'interests', 'affiliations'];
@@ -239,6 +577,187 @@ const MinimalistLayout = ({ resume, theme }: { resume: ResumeData, theme: Resume
             {/* Content */}
             <div className={spacingClass}>
                 {sectionOrder.map(s => <React.Fragment key={s}>{renderSectionContent(s)}</React.Fragment>)}
+            </div>
+        </div>
+    );
+};
+
+// --- EXECUTIVE LAYOUT (Original) ---
+const ExecutiveLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    const isOnePage = theme.targetPageCount === 1;
+    const spacingClass = isOnePage ? 'space-y-4' : 'space-y-6';
+    const bodySize = isOnePage ? 'text-[10px] leading-relaxed' : 'text-xs leading-relaxed';
+
+    const SectionTitle = ({ children }: { children?: React.ReactNode }) => (
+        <h3 className="text-center font-bold text-gray-900 uppercase tracking-widest text-sm border-b-2 border-gray-800 pb-1 mb-4 mt-2">
+            {children}
+        </h3>
+    );
+
+    // Helper for rendering content with executive styling
+    const renderContent = (sectionName: string) => {
+        if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
+
+        switch (sectionName) {
+            case 'summary':
+                return resume.summary ? (
+                    <div><SectionTitle>Professional Summary</SectionTitle><p className={`${bodySize} text-justify`}>{resume.summary}</p></div>
+                ) : null;
+            case 'experience':
+                return resume.experience.length > 0 ? (
+                    <div>
+                        <SectionTitle>Professional Experience</SectionTitle>
+                        <div className="space-y-5">
+                            {resume.experience.filter(e => e.visible !== false).map((e, i) => (
+                                <div key={i}>
+                                    <div className="flex justify-between items-baseline border-b border-gray-200 pb-1 mb-2">
+                                        <h4 className="font-bold text-sm text-gray-900">{e.company}</h4>
+                                        <span className="text-xs font-bold text-gray-600">{e.period}</span>
+                                    </div>
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-xs font-serif italic text-gray-700 font-semibold">{e.role}</span>
+                                        <span className="text-[10px] text-gray-500 uppercase">{e.location}</span>
+                                    </div>
+                                    <ul className={`list-disc ml-4 space-y-1 ${bodySize}`}>
+                                        {e.bullets.filter(b => b.visible !== false).map(b => (
+                                            <li key={b.id}><ImpactHighlighter text={b.text} /></li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : null;
+            case 'education':
+                return resume.education ? (
+                    <div><SectionTitle>Education</SectionTitle><div className={`whitespace-pre-wrap ${bodySize}`}>{resume.education}</div></div>
+                ) : null;
+            case 'skills':
+                return resume.skills.length > 0 ? (
+                    <div>
+                        <SectionTitle>Core Competencies</SectionTitle>
+                        <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-medium text-gray-800">
+                            {resume.skills.map((skill, i) => <span key={i}>{skill}</span>)}
+                        </div>
+                    </div>
+                ) : null;
+            // ... (Other sections follow similar pattern)
+            default:
+                // Reuse Minimalist logic for other sections but wrap in Executive style if possible, 
+                // or just keep simple. For brevity, linking Projects.
+                if (sectionName === 'projects' && resume.projects.length > 0) {
+                    return (
+                        <div>
+                            <SectionTitle>Key Projects</SectionTitle>
+                            <div className="space-y-4">
+                                {resume.projects.map((p, i) => (
+                                    <div key={i}>
+                                        <div className="flex justify-between font-bold text-sm border-b border-gray-100 pb-1">
+                                            <span>{p.name}</span>
+                                        </div>
+                                        <p className={`${bodySize} mt-1`}>{p.description}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                }
+                return null;
+        }
+    };
+
+    const sectionOrder = useMemo(() => {
+        const base = resume.sectionOrder || [];
+        const missing = ['summary', 'experience', 'education', 'skills', 'projects'].filter(s => !base.includes(s));
+        return [...base, ...missing];
+    }, [resume.sectionOrder]);
+
+    return (
+        <div className="h-full p-12 bg-white text-gray-900 font-serif">
+            {/* Header */}
+            <div className="text-center border-b-2 border-gray-900 pb-6 mb-8">
+                <h1 className="text-4xl font-bold uppercase tracking-widest text-gray-900 mb-2">{resume.fullName}</h1>
+                <div className="text-sm font-sans uppercase tracking-[0.2em] text-gray-600 font-bold mb-4">{resume.role}</div>
+                <div className="flex flex-wrap justify-center gap-4 text-xs font-sans text-gray-500 uppercase tracking-wide">
+                    {resume.email && <span>{resume.email}</span>}
+                    {resume.phone && <span>• {resume.phone}</span>}
+                    {resume.location && <span>• {resume.location}</span>}
+                    {resume.linkedin && <span>• {resume.linkedin.replace(/^https?:\/\//, '')}</span>}
+                </div>
+            </div>
+
+            {/* Content */}
+            <div className={spacingClass}>
+                {sectionOrder.map(s => <React.Fragment key={s}>{renderContent(s)}</React.Fragment>)}
+            </div>
+        </div>
+    );
+};
+
+// --- CREATIVE LAYOUT (Original) ---
+const CreativeLayout = ({ resume, theme }: { resume: ResumeData, theme: ResumeThemeConfig, children?: React.ReactNode }) => {
+    // Split sections into Sidebar and Main
+    const sidebarKeys = ['skills', 'education', 'languages', 'certifications', 'awards', 'interests', 'affiliations', 'contact'];
+    const mainKeys = ['summary', 'experience', 'projects'];
+
+    const SidebarTitle = ({ children }: { children?: React.ReactNode }) => <h4 className="text-indigo-400 font-bold uppercase tracking-widest text-xs border-b border-gray-700 pb-2 mb-3">{children}</h4>;
+    const SidebarText = ({ children }: { children?: React.ReactNode }) => <div className="text-slate-300 text-xs leading-relaxed">{children}</div>;
+
+    const renderSidebarItem = (sectionName: string) => {
+        if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
+        
+        switch(sectionName) {
+            case 'skills': return resume.skills.length > 0 ? <div className="mb-6"><SidebarTitle>Skills</SidebarTitle><div className="flex flex-wrap gap-2">{resume.skills.map((s,i)=><span key={i} className="bg-slate-800 px-2 py-1 rounded text-[10px] text-indigo-300">{s}</span>)}</div></div> : null;
+            case 'education': return resume.education ? <div className="mb-6"><SidebarTitle>Education</SidebarTitle><SidebarText>{resume.education}</SidebarText></div> : null;
+            case 'certifications': return resume.certifications.length > 0 ? <div className="mb-6"><SidebarTitle>Certifications</SidebarTitle><div className="space-y-2">{resume.certifications.map((c,i)=><div key={i}><div className="text-white font-bold">{c.name}</div><div className="text-[10px] opacity-70">{c.issuer}</div></div>)}</div></div> : null;
+            default: return null;
+        }
+    };
+
+    const MainTitle = ({ children }: { children?: React.ReactNode }) => <h3 className="text-slate-900 font-bold uppercase tracking-tighter text-xl mb-4 relative pl-4 border-l-4 border-indigo-600">{children}</h3>;
+
+    const renderMainItem = (sectionName: string) => {
+        if (resume.visibleSections && resume.visibleSections[sectionName] === false) return null;
+        
+        switch(sectionName) {
+            case 'summary': return resume.summary ? <div className="mb-8"><MainTitle>Profile</MainTitle><p className="text-slate-700 text-sm leading-relaxed">{resume.summary}</p></div> : null;
+            case 'experience': return resume.experience.length > 0 ? <div className="mb-8"><MainTitle>Experience</MainTitle><div className="space-y-6">{resume.experience.filter(e=>e.visible !== false).map((e,i)=><div key={i}><div className="flex justify-between items-baseline mb-1"><h4 className="font-bold text-gray-900">{e.role}</h4><span className="text-xs font-bold text-indigo-600">{e.period}</span></div><div className="text-xs font-bold text-gray-500 uppercase mb-2">{e.company}</div><ul className="list-disc ml-4 space-y-1 text-sm text-gray-600">{e.bullets.filter(b=>b.visible!==false).map(b=><li key={b.id}><ImpactHighlighter text={b.text}/></li>)}</ul></div>)}</div></div> : null;
+            case 'projects': return resume.projects.length > 0 ? <div className="mb-8"><MainTitle>Projects</MainTitle><div className="grid grid-cols-1 gap-4">{resume.projects.map((p,i)=><div key={i} className="bg-slate-50 p-4 rounded-lg border border-slate-100"><div className="font-bold text-slate-900 text-sm mb-1">{p.name}</div><p className="text-xs text-slate-600">{p.description}</p></div>)}</div></div> : null;
+            default: return null;
+        }
+    };
+
+    return (
+        <div className="flex h-full w-full font-sans bg-white">
+            {/* Sidebar */}
+            <div className="w-[32%] bg-slate-900 text-white p-8 flex flex-col shrink-0">
+                <div className="mb-10">
+                    <div className="w-16 h-16 bg-indigo-600 rounded-full flex items-center justify-center text-2xl font-bold mb-4 shadow-lg shadow-indigo-500/30">
+                        {resume.fullName.charAt(0)}
+                    </div>
+                    <h1 className="text-2xl font-bold leading-tight mb-2">{resume.fullName}</h1>
+                    <p className="text-indigo-400 font-medium text-sm">{resume.role}</p>
+                </div>
+
+                <div className="space-y-1 text-xs text-slate-400 mb-10">
+                    {resume.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3"/> {resume.email}</div>}
+                    {resume.phone && <div className="flex items-center gap-2"><Phone className="w-3 h-3"/> {resume.phone}</div>}
+                    {resume.location && <div className="flex items-center gap-2"><MapPin className="w-3 h-3"/> {resume.location}</div>}
+                    {resume.linkedin && <div className="flex items-center gap-2"><Linkedin className="w-3 h-3"/> {resume.linkedin.replace(/^https?:\/\//, '')}</div>}
+                </div>
+
+                <div className="flex-1 overflow-hidden space-y-1">
+                    {sidebarKeys.map(key => <React.Fragment key={key}>{renderSidebarItem(key)}</React.Fragment>)}
+                </div>
+            </div>
+
+            {/* Main */}
+            <div className="flex-1 p-10 bg-white">
+                {mainKeys.map(key => <React.Fragment key={key}>{renderMainItem(key)}</React.Fragment>)}
+                {/* Catch-all for others */}
+                {resume.sectionOrder.filter(s => !sidebarKeys.includes(s) && !mainKeys.includes(s)).map(s => (
+                    <React.Fragment key={s}>{renderMainItem(s)}</React.Fragment>
+                ))}
             </div>
         </div>
     );
@@ -289,11 +808,11 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
   const updateTheme = (updates: Partial<ResumeThemeConfig>) => onThemeUpdate && onThemeUpdate({ ...theme, ...updates });
 
   const toggleSectionVisibility = (e: React.MouseEvent, sectionId: string) => {
-      e.stopPropagation(); // Critical for avoiding parent click capture
+      e.stopPropagation(); 
       if (!onUpdate) return;
       
       const currentVisibility = resume.visibleSections || {};
-      const isVisible = currentVisibility[sectionId] !== false; // default true
+      const isVisible = currentVisibility[sectionId] !== false; 
       
       onUpdate({
           ...resume,
@@ -304,7 +823,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
       });
   };
 
-  // Robustly determine active sections for the sidebar, including any missing from order
   const activeSections = useMemo(() => {
       const currentOrder = resume.sectionOrder || [];
       const allPossible = ['summary', 'experience', 'education', 'skills', 'projects', 'certifications', 'languages', 'awards', 'interests', 'affiliations'];
@@ -316,7 +834,6 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
       e.stopPropagation();
       if (!onUpdate) return;
       
-      // We must use the full list to ensure we don't lose items during reorder
       const newOrder = [...activeSections];
       
       if (direction === 'up' && index > 0) {
@@ -415,7 +932,7 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                        <div className="space-y-4">
                            <h4 className="text-xs font-bold text-slate-400 uppercase">Premium Templates</h4>
                            <div className="grid grid-cols-1 gap-2">
-                               {['Executive', 'Minimalist', 'Creative', 'Academic', 'ATS', 'International'].map((l) => (
+                               {['Executive', 'Minimalist', 'Creative', 'Academic', 'ATS', 'International', 'LaTeX', 'Modern', 'Startup', 'Swiss', 'Tech'].map((l) => (
                                    <button 
                                         key={l} 
                                         onClick={() => updateTheme({ layout: l as any })} 
@@ -531,11 +1048,24 @@ const ResumePreview: React.FC<ResumePreviewProps> = ({ resume, onThemeUpdate, on
                         }}
                     >
                         {/* Renderer Switcher */}
-                        {theme.layout === 'Minimalist' ? (
+                        {theme.layout === 'Minimalist' && <MinimalistLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Executive' && <ExecutiveLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Creative' && <CreativeLayout resume={optimizedResume} theme={theme} />}
+                        
+                        {/* New Layouts */}
+                        {theme.layout === 'LaTeX' && <LatexLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Modern' && <ModernLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Startup' && <StartupLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Swiss' && <SwissLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'Tech' && <TechLayout resume={optimizedResume} theme={theme} />}
+
+                        {/* Fallbacks */}
+                        {['Academic', 'International'].includes(theme.layout) && <ExecutiveLayout resume={optimizedResume} theme={theme} />}
+                        {theme.layout === 'ATS' && <MinimalistLayout resume={optimizedResume} theme={theme} />}
+                        
+                        {/* Default Fallback */}
+                        {!['Minimalist', 'Executive', 'Creative', 'Academic', 'International', 'ATS', 'LaTeX', 'Modern', 'Startup', 'Swiss', 'Tech'].includes(theme.layout) && (
                             <MinimalistLayout resume={optimizedResume} theme={theme} />
-                        ) : (
-                            // Use Minimalist as default fallback for now to prevent crashes
-                            <MinimalistLayout resume={optimizedResume} theme={theme} /> 
                         )}
                     </div>
                 </div>
