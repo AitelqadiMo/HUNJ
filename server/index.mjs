@@ -20,11 +20,11 @@ const stripePricePro = process.env.STRIPE_PRICE_PRO || '';
 const stripePriceTeam = process.env.STRIPE_PRICE_TEAM || '';
 const stripePaymentLink = process.env.STRIPE_PAYMENT_LINK || 'https://buy.stripe.com/test_cNi28ra0n5LQbSM44K8N200';
 
-if (!stripeSecretKey) {
-  throw new Error('Missing STRIPE_SECRET_KEY');
-}
-
-const stripe = new Stripe(stripeSecretKey);
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+const getStripe = () => {
+  if (!stripe) throw new Error('Missing STRIPE_SECRET_KEY');
+  return stripe;
+};
 
 app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use((req, res, next) => {
@@ -94,6 +94,7 @@ const mapSubscriptionToBilling = (sub, fallbackPlan = 'pro') => {
 };
 
 const getLatestSubscriptionForCustomer = async (customerId) => {
+  const stripe = getStripe();
   if (!customerId) return null;
   const subs = await stripe.subscriptions.list({
     customer: customerId,
@@ -112,6 +113,7 @@ const getLatestSubscriptionForCustomer = async (customerId) => {
 };
 
 const resolveCustomerEmail = async (customerId) => {
+  const stripe = getStripe();
   if (!customerId) return '';
   try {
     const customer = await stripe.customers.retrieve(customerId);
@@ -399,6 +401,7 @@ app.get('/api/documents', async (req, res) => {
 
 app.post('/api/billing/checkout', express.json(), async (req, res) => {
   try {
+    const stripe = getStripe();
     const db = initFirestore();
     const { userId, email, name, tier, successUrl, cancelUrl } = req.body || {};
 
@@ -490,6 +493,7 @@ app.get('/api/billing/status', async (req, res) => {
 
 app.post('/api/billing/cancel', async (req, res) => {
   try {
+    const stripe = getStripe();
     const db = initFirestore();
     const { userId, email, immediate } = req.body || {};
     if (!userId || !email) {
@@ -531,6 +535,7 @@ app.post('/api/billing/cancel', async (req, res) => {
 
 app.post('/api/billing/reactivate', async (req, res) => {
   try {
+    const stripe = getStripe();
     const db = initFirestore();
     const { userId, email } = req.body || {};
     if (!userId || !email) {
@@ -567,6 +572,7 @@ app.post('/api/billing/reactivate', async (req, res) => {
 app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   let event;
   try {
+    const stripe = getStripe();
     const signature = req.headers['stripe-signature'];
     if (!stripeWebhookSecret || !signature) {
       return res.status(400).send('Webhook secret/signature missing');
