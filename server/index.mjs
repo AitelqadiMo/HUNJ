@@ -2,13 +2,16 @@ import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import Stripe from 'stripe';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { initFirestore } from './firestore.mjs';
 
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
 const app = express();
-const port = Number(process.env.BILLING_PORT || 8787);
+const port = Number(process.env.PORT || process.env.BILLING_PORT || 8787);
 const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -707,6 +710,18 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
   }
 });
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, '../dist');
+const distIndexPath = path.join(distPath, 'index.html');
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get(/^(?!\/api\/).*/, (_, res) => {
+    res.sendFile(distIndexPath);
+  });
+}
+
 app.listen(port, () => {
-  console.log(`Billing server running at http://localhost:${port}`);
+  console.log(`Billing server running on port ${port}`);
 });

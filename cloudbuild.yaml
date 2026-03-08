@@ -1,0 +1,40 @@
+substitutions:
+  _AR_HOSTNAME: us-west1-docker.pkg.dev
+  _AR_PROJECT_ID: $PROJECT_ID
+  _AR_REPOSITORY: cloud-run-source-deploy
+  _DEPLOY_REGION: us-west1
+  _PLATFORM: managed
+  _SERVICE_NAME: hunj-hunt-your-job
+
+steps:
+  - id: Build image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"
+      - .
+
+  - id: Push image
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"
+
+  - id: Deploy to Cloud Run
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - "${_SERVICE_NAME}"
+      - --image
+      - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"
+      - --region
+      - "${_DEPLOY_REGION}"
+      - --platform
+      - "${_PLATFORM}"
+      - --allow-unauthenticated
+
+images:
+  - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"

@@ -1,6 +1,8 @@
 import { BillingState, SubscriptionTier, User } from '../types';
 
-const API_BASE = (import.meta as any)?.env?.VITE_BILLING_API_BASE || 'http://localhost:8787';
+const API_BASE =
+  (import.meta as any)?.env?.VITE_BILLING_API_BASE ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787');
 
 interface SubscriptionStatusResponse {
   userId: string;
