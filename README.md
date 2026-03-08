@@ -1,5 +1,5 @@
 
-# HUNJ - Intelligent Career Acceleration Platform 🚀
+# HUNJ - Intelligent Career Acceleration Platform  🚀
 
 **HUNJ** (Hunt Your Job) is an AI-native career command center designed to optimize every stage of the job search lifecycle. Unlike standard resume builders, HUNJ acts as a strategic agent, using advanced LLMs to tailor applications, simulate interviews, analyze market trends, and automate networking strategies.
 
