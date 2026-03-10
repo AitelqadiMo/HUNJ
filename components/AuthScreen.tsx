@@ -83,7 +83,9 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [showDevHelp, setShowDevHelp] = useState(false);
   const [copiedOrigin, setCopiedOrigin] = useState(false);
   
-  const GOOGLE_CLIENT_ID = (import.meta as any)?.env?.VITE_GOOGLE_CLIENT_ID || '';
+  const GOOGLE_CLIENT_ID =
+    (import.meta as any)?.env?.VITE_GOOGLE_CLIENT_ID ||
+    '320374865308-32l01sgrf0u5seerei3ei2ke31udq5o5.apps.googleusercontent.com';
   
   const googleBtnRef = useRef<HTMLDivElement>(null);
   
@@ -92,7 +94,26 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           setError('Google Sign-In is not configured. Missing VITE_GOOGLE_CLIENT_ID.');
           return;
       }
-      if (typeof window !== 'undefined' && window.google && window.google.accounts) {
+
+      const ensureScript = () => {
+          if (typeof window === 'undefined') return;
+          if (window.google && window.google.accounts) return;
+          const existing = document.querySelector('script[data-google-gsi="true"]');
+          if (existing) return;
+          const script = document.createElement('script');
+          script.src = 'https://accounts.google.com/gsi/client';
+          script.async = true;
+          script.defer = true;
+          script.dataset.googleGsi = 'true';
+          script.onload = () => {
+              initGoogle();
+          };
+          script.onerror = () => setError('Failed to load Google Sign-In.');
+          document.head.appendChild(script);
+      };
+
+      const initGoogle = () => {
+          if (typeof window === 'undefined' || !window.google || !window.google.accounts) return;
           try {
               window.google.accounts.id.initialize({
                   client_id: GOOGLE_CLIENT_ID,
@@ -102,8 +123,8 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
                   context: 'signin',
                   ux_mode: 'popup'
               });
-              
               if (googleBtnRef.current) {
+                  googleBtnRef.current.innerHTML = '';
                   window.google.accounts.id.renderButton(
                       googleBtnRef.current,
                       { theme: "filled_black", size: "large", width: "100%", text: "continue_with", shape: "pill" }
@@ -112,8 +133,11 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
           } catch (e) {
               console.warn("Google Auth failed to initialize.", e);
           }
-      }
-  }, [isRegistering]);
+      };
+
+      ensureScript();
+      initGoogle();
+  }, [isRegistering, GOOGLE_CLIENT_ID]);
 
   const parseJwt = (token: string) => {
       try {
