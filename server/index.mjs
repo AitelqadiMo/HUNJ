@@ -533,6 +533,214 @@ app.get('/api/billing/status', async (req, res) => {
   }
 });
 
+app.post('/api/ai/analyze-job', async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
+    const ai = getGemini();
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        company: { type: Type.STRING },
+        requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+        optionalSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+        industry: { type: Type.STRING },
+        seniorityLevel: { type: Type.STRING },
+        leadershipRequired: { type: Type.BOOLEAN },
+        keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+        summary: { type: Type.STRING },
+        experienceLevel: { type: Type.STRING },
+        hiringProbability: { type: Type.NUMBER },
+        hiringReasoning: { type: Type.STRING },
+        companyInsights: { type: Type.STRING },
+        hiddenRequirements: { type: Type.ARRAY, items: { type: Type.STRING } },
+        cultureIndicators: { type: Type.ARRAY, items: { type: Type.STRING } },
+        softSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
+        tools: { type: Type.ARRAY, items: { type: Type.STRING } },
+        certifications: { type: Type.ARRAY, items: { type: Type.STRING } }
+      }
+    };
+    const response = await runWithTimeout(
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash-lite',
+        contents: `Extract structured job requirements from the text. Keep output concise and factual.\n${text.substring(0, 12000)}`,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema
+        }
+      })
+    );
+    const parsed = JSON.parse(response?.text || '{}');
+    return res.json(parsed);
+  } catch (error) {
+    console.error('analyze job error', error);
+    return res.status(500).json({ error: 'Failed to analyze job' });
+  }
+});
+
+app.post('/api/ai/tailor-resume', async (req, res) => {
+  try {
+    const { resume, job, missingSkills } = req.body || {};
+    if (!resume || !job) return res.status(400).json({ error: 'resume and job are required' });
+    const ai = getGemini();
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: { type: Type.STRING },
+        experience: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              role: { type: Type.STRING },
+              company: { type: Type.STRING },
+              period: { type: Type.STRING },
+              bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
+            }
+          }
+        },
+        reorderedSkills: { type: Type.ARRAY, items: { type: Type.STRING } }
+      }
+    };
+
+    const prompt = `You are an elite resume writer. Tailor the resume for this role.
+Job title: ${job.title || ''}
+Company: ${job.company || ''}
+Required skills: ${(job.requiredSkills || []).join(', ')}
+Optional skills: ${(job.optionalSkills || []).join(', ')}
+Keywords: ${(job.keywords || []).join(', ')}
+Priority missing skills: ${(missingSkills || []).slice(0, 8).join(', ') || 'none'}
+Rules:
+- Keep all facts truthful; do not invent employers, dates, or degrees.
+- Rewrite summary and bullets to emphasize relevant impact.
+- Add quantified impact only if implied by existing bullets.
+- Keep bullets concise (1 line each).
+Resume JSON: ${JSON.stringify(sanitizeResumeInput(resume)).slice(0, 12000)}`;
+
+    const response = await runWithTimeout(
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          thinkingConfig: { thinkingBudget: 4096 }
+        }
+      })
+    );
+    const parsed = JSON.parse(response?.text || '{}');
+    return res.json(parsed);
+  } catch (error) {
+    console.error('tailor resume error', error);
+    return res.status(500).json({ error: 'Failed to tailor resume' });
+  }
+});
+
+app.post('/api/ai/update-resume', async (req, res) => {
+  try {
+    const { resume, instruction } = req.body || {};
+    if (!resume || !instruction) return res.status(400).json({ error: 'resume and instruction are required' });
+    const ai = getGemini();
+    const schema = {
+      type: Type.OBJECT,
+      properties: {
+        summary: { type: Type.STRING },
+        experience: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              role: { type: Type.STRING },
+              company: { type: Type.STRING },
+              period: { type: Type.STRING },
+              bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
+            }
+          }
+        },
+        skills: { type: Type.ARRAY, items: { type: Type.STRING } }
+      }
+    };
+    const prompt = `Apply this instruction to the resume while preserving facts and structure.
+Instruction: ${instruction}
+Resume JSON: ${JSON.stringify(sanitizeResumeInput(resume)).slice(0, 12000)}`;
+    const response = await runWithTimeout(
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: schema,
+          thinkingConfig: { thinkingBudget: 2048 }
+        }
+      })
+    );
+    const parsed = JSON.parse(response?.text || '{}');
+    return res.json(parsed);
+  } catch (error) {
+    console.error('update resume error', error);
+    return res.status(500).json({ error: 'Failed to update resume' });
+  }
+});
+
+app.post('/api/ai/job-search', async (req, res) => {
+  try {
+    const { filters } = req.body || {};
+    if (!filters) return res.status(400).json({ error: 'filters are required' });
+    const ai = getGemini();
+    const response = await runWithTimeout(
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Find recent job opportunities from public web data and return only verifiable listings.
+Query: ${filters.query}
+Location: ${filters.location}
+Remote: ${filters.remote}
+Date Posted: ${filters.datePosted}
+Level: ${filters.level}
+Type: ${filters.type}
+Company filter: ${filters.company || 'Any'}
+Visa sponsorship: ${filters.visa || 'Any'}
+Easy Apply: ${filters.easyApply || 'Any'}
+Minimum salary: ${filters.minSalary || 0}
+Minimum match score: ${filters.minMatch || 0}
+Return JSON array with:
+id,title,company,location,description,requirements,postedDate,salaryRange,visaSupport,easyApply,employmentType,matchScore,tags`,
+        config: {
+          responseMimeType: 'application/json',
+          tools: [{ googleSearch: {} }],
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                title: { type: Type.STRING },
+                company: { type: Type.STRING },
+                location: { type: Type.STRING },
+                description: { type: Type.STRING },
+                requirements: { type: Type.ARRAY, items: { type: Type.STRING } },
+                postedDate: { type: Type.STRING },
+                salaryRange: { type: Type.STRING },
+                visaSupport: { type: Type.BOOLEAN },
+                easyApply: { type: Type.BOOLEAN },
+                employmentType: { type: Type.STRING },
+                matchScore: { type: Type.NUMBER },
+                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+              }
+            }
+          },
+          thinkingConfig: { thinkingBudget: 1024 }
+        }
+      })
+    );
+    const parsed = JSON.parse(response?.text || '[]');
+    return res.json(Array.isArray(parsed) ? parsed : []);
+  } catch (error) {
+    console.error('job search error', error);
+    return res.status(500).json({ error: 'Failed to search jobs' });
+  }
+});
+
 app.post('/api/billing/cancel', async (req, res) => {
   try {
     const stripe = getStripe();

@@ -8,6 +8,7 @@ substitutions:
   _VITE_GOOGLE_CLIENT_ID: ""
   _VITE_GEMINI_API_KEY: ""
   _VITE_ALL_FEATURES: "true"
+  _VITE_AI_API_BASE: ""
 
 steps:
   - id: Build image
@@ -20,6 +21,8 @@ steps:
       - "VITE_GEMINI_API_KEY=${_VITE_GEMINI_API_KEY}"
       - --build-arg
       - "VITE_ALL_FEATURES=${_VITE_ALL_FEATURES}"
+      - --build-arg
+      - "VITE_AI_API_BASE=${_VITE_AI_API_BASE}"
       - -t
       - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"
       - .

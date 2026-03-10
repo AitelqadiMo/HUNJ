@@ -732,6 +732,27 @@ Output plain text only.`
 
 // --- HELPERS ---
 export const updateResumeWithAI = async (r: ResumeData, instruction: string): Promise<ResumeData> => {
+    const server = await postAI<any>('/api/ai/update-resume', { resume: r, instruction });
+    if (server && (server.summary || server.experience || server.skills)) {
+        return sanitizeResumeData({
+            ...r,
+            summary: server.summary || r.summary,
+            skills: server.skills || r.skills,
+            experience: (server.experience || r.experience).map((exp: any, i: number) => ({
+                id: exp.id || `exp-${Date.now()}-${i}`,
+                role: exp.role,
+                company: exp.company,
+                period: exp.period,
+                visible: exp.visible !== false,
+                bullets: (exp.bullets || []).map((b: any, bi: number) => ({
+                    id: b.id || `b-${i}-${bi}`,
+                    text: typeof b === 'string' ? b : b.text || '',
+                    visible: b.visible !== false
+                }))
+            }))
+        });
+    }
+
     const fallback = sanitizeResumeData({ ...r, timestamp: Date.now() });
     const parsed = await generateJson<any>(
         `edit:${hashPayload(`${r.id}|${instruction}|${r.summary.slice(0, 200)}`)}`,

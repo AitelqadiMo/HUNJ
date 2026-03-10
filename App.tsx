@@ -428,14 +428,14 @@ const App: React.FC = () => {
       let tailoredResumes: ResumeData[] = [];
       let skillsResult: SkillMatch[] = [];
 
+      // Ensure privacy mode is respected for AI inputs
+      const tempProfile: UserProfile = { ...profile, masterResume: inputResume };
       if (hasStructuredData) {
           [tailoredResumes, skillsResult] = await Promise.all([
-              assembleSmartResume(profile, analysis),
+              assembleSmartResume(tempProfile, analysis),
               analyzeSkillsGap(inputResume.skills, analysis.requiredSkills)
           ]);
       } else {
-          // Construct temp profile for generation to support both signatures (privacy respected via inputResume in temp object)
-          const tempProfile: UserProfile = { ...profile, masterResume: inputResume };
           [tailoredResumes, skillsResult] = await Promise.all([
               generateTailoredResume(tempProfile, analysis),
               analyzeSkillsGap(inputResume.skills, analysis.requiredSkills)
