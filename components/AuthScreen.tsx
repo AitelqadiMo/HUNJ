@@ -83,11 +83,15 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const [showDevHelp, setShowDevHelp] = useState(false);
   const [copiedOrigin, setCopiedOrigin] = useState(false);
   
-  const GOOGLE_CLIENT_ID = "320374865308-32l01sgrf0u5seerei3ei2ke31udq5o5.apps.googleusercontent.com"; 
+  const GOOGLE_CLIENT_ID = (import.meta as any)?.env?.VITE_GOOGLE_CLIENT_ID || '';
   
   const googleBtnRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
+      if (!GOOGLE_CLIENT_ID) {
+          setError('Google Sign-In is not configured. Missing VITE_GOOGLE_CLIENT_ID.');
+          return;
+      }
       if (typeof window !== 'undefined' && window.google && window.google.accounts) {
           try {
               window.google.accounts.id.initialize({

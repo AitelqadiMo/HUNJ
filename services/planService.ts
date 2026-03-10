@@ -23,6 +23,8 @@ export const FEATURE_PLAN_REQUIREMENT: Record<PremiumFeature, SubscriptionTier> 
   'bias-audit': 'pro',
 };
 
+const ALL_FEATURES_ENABLED = String((import.meta as any)?.env?.VITE_ALL_FEATURES || '').toLowerCase() === 'true';
+
 const tierRank: Record<SubscriptionTier, number> = {
   free: 0,
   pro: 1,
@@ -30,14 +32,17 @@ const tierRank: Record<SubscriptionTier, number> = {
 };
 
 export const hasPlanAccess = (plan: SubscriptionTier, required: SubscriptionTier): boolean => {
+  if (ALL_FEATURES_ENABLED) return true;
   return tierRank[plan] >= tierRank[required];
 };
 
 export const hasFeatureAccess = (plan: SubscriptionTier, feature: PremiumFeature): boolean => {
+  if (ALL_FEATURES_ENABLED) return true;
   return hasPlanAccess(plan, FEATURE_PLAN_REQUIREMENT[feature]);
 };
 
 export const getEffectivePlan = (billing: BillingState): SubscriptionTier => {
+  if (ALL_FEATURES_ENABLED) return 'pro';
   if (!billing || billing.plan === 'free') return 'free';
   const now = Date.now();
   const renewsAtTs = billing.renewsAt ? Date.parse(billing.renewsAt) : NaN;

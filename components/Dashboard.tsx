@@ -22,6 +22,7 @@ const Dashboard: React.FC<ExtendedDashboardProps> = ({
   applications,
   onNewApplication,
   onSelectApplication,
+  onUpdateStatus,
   onDuplicateApplication,
   onDeleteApplication,
 }) => {

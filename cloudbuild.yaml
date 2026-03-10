@@ -5,12 +5,21 @@ substitutions:
   _DEPLOY_REGION: us-west1
   _PLATFORM: managed
   _SERVICE_NAME: hunj-hunt-your-job
+  _VITE_GOOGLE_CLIENT_ID: ""
+  _VITE_GEMINI_API_KEY: ""
+  _VITE_ALL_FEATURES: "true"
 
 steps:
   - id: Build image
     name: gcr.io/cloud-builders/docker
     args:
       - build
+      - --build-arg
+      - "VITE_GOOGLE_CLIENT_ID=${_VITE_GOOGLE_CLIENT_ID}"
+      - --build-arg
+      - "VITE_GEMINI_API_KEY=${_VITE_GEMINI_API_KEY}"
+      - --build-arg
+      - "VITE_ALL_FEATURES=${_VITE_ALL_FEATURES}"
       - -t
       - "${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}"
       - .

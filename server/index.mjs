@@ -26,6 +26,10 @@ const getStripe = () => {
   return stripe;
 };
 
+const EARLY_ACCESS_LIMIT = Number(process.env.EARLY_ACCESS_LIMIT || 20);
+const EARLY_ACCESS_DOC = 'meta/earlyAccess';
+const EARLY_ACCESS_CODE = 'early20';
+
 app.use(cors({ origin: frontendOrigin, credentials: true }));
 app.use((req, res, next) => {
   if (req.path === '/api/billing/webhook') return next();
@@ -129,6 +133,7 @@ const resolveCustomerEmail = async (customerId) => {
 const ensureUserDoc = async (db, { userId, email, name }) => {
   const ref = db.collection('users').doc(userId);
   const snap = await ref.get();
+  const isNew = !snap.exists;
   if (!snap.exists) {
     await ref.set(
       {
@@ -144,7 +149,41 @@ const ensureUserDoc = async (db, { userId, email, name }) => {
   } else {
     await ref.set({ email, name: name || '', updatedAt: new Date().toISOString() }, { merge: true });
   }
+
+  if (isNew) {
+    await assignEarlyAccess(db, ref);
+  }
+
   return ref;
+};
+
+const assignEarlyAccess = async (db, userRef) => {
+  if (!EARLY_ACCESS_LIMIT || EARLY_ACCESS_LIMIT <= 0) return false;
+  const metaRef = db.doc(EARLY_ACCESS_DOC);
+  const nowIso = new Date().toISOString();
+  let granted = false;
+  try {
+    await db.runTransaction(async (tx) => {
+      const [metaSnap, userSnap] = await Promise.all([tx.get(metaRef), tx.get(userRef)]);
+      const userData = userSnap.exists ? userSnap.data() : null;
+      if (userData?.promo?.freeAll) {
+        granted = true;
+        return;
+      }
+      const count = Number(metaSnap.exists ? metaSnap.data()?.count : 0) || 0;
+      if (count >= EARLY_ACCESS_LIMIT) return;
+      tx.set(metaRef, { count: count + 1, updatedAt: nowIso }, { merge: true });
+      tx.set(
+        userRef,
+        { promo: { freeAll: true, code: EARLY_ACCESS_CODE, assignedAt: nowIso } },
+        { merge: true }
+      );
+      granted = true;
+    });
+  } catch (error) {
+    console.error('Early access assignment failed', error);
+  }
+  return granted;
 };
 
 app.post('/api/users/upsert', async (req, res) => {
@@ -473,12 +512,15 @@ app.get('/api/billing/status', async (req, res) => {
     const snap = await userRef.get();
     const user = snap.data() || {};
     const billing = user.billing || { plan: 'free', status: 'active' };
+    const promoFreeAll = Boolean(user?.promo?.freeAll);
+    const effectivePlan = promoFreeAll ? 'pro' : (billing.plan || 'free');
+    const effectiveStatus = promoFreeAll ? 'active' : (billing.status || 'active');
 
     return res.json({
       userId,
       email,
-      plan: billing.plan || 'free',
-      status: billing.status || 'active',
+      plan: effectivePlan,
+      status: effectiveStatus,
       renewsAt: billing.renewsAt || undefined,
       customerId: billing.customerId || undefined,
       subscriptionId: billing.subscriptionId || undefined,
