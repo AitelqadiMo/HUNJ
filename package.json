@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "node server/index.mjs"
+    "server": "node server/index.mjs",
+    "dev:full": "concurrently --kill-others-on-fail --names \"SERVER,CLIENT\" --prefix-colors \"blue,green\" \"node server/index.mjs\" \"vite\""
   },
   "dependencies": {
     "@google/genai": "^1.41.0",
@@ -18,12 +19,12 @@
     "lucide-react": "^0.563.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "recharts": "^3.7.0",
-    "stripe": "^18.5.0"
+    "recharts": "^3.7.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.2.1",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

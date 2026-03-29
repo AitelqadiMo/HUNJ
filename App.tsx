@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { JobAnalysis, ResumeData, ATSScore, SkillMatch, UserProfile, Application, BiasAnalysis, InterviewMessage, LinkedInProfile, SalaryInsight, NetworkingStrategy, DocumentItem, ResumeThemeConfig, ExternalJob, User, SubscriptionTier } from './types';
+import { JobAnalysis, ResumeData, ATSScore, SkillMatch, UserProfile, Application, BiasAnalysis, InterviewMessage, LinkedInProfile, SalaryInsight, NetworkingStrategy, DocumentItem, ResumeThemeConfig, ExternalJob, User } from './types';
 import JobInput from './components/JobInput';
 import ResumeEditor from './components/ResumeEditor';
 import MatchAnalysis from './components/MatchAnalysis';
@@ -25,16 +25,15 @@ import AuthScreen from './components/AuthScreen';
 import LandingPage from './components/LandingPage';
 import OnboardingTour from './components/OnboardingTour';
 import OnboardingWizard from './components/OnboardingWizard';
-import PricingModal from './components/PricingModal';
 import { calculateATSScore, generateTailoredResume, assembleSmartResume, analyzeSkillsGap, analyzeBias, updateResumeWithAI, analyzeJobDescription, sanitizeResumeData } from './services/geminiService';
 import { storageService } from './services/storageService';
 import { logger } from './services/loggingService';
 import { anonymizeResume, restorePII } from './utils/privacy';
-import { Target, Eye, MessageSquare, Linkedin, PenTool, Globe, ArrowLeft, RefreshCw, AlertTriangle, Cloud, DollarSign, Users, FileText, Sparkles, BrainCircuit, LayoutGrid, Home, Menu, X, Minimize2, Maximize2, PanelRightClose, PanelRightOpen, Bell, ArrowRight, Lock, Download, CheckCircle2, Languages, LifeBuoy, Mail } from 'lucide-react';
+import { Target, Eye, MessageSquare, Linkedin, PenTool, Globe, ArrowLeft, RefreshCw, AlertTriangle, Cloud, DollarSign, Users, FileText, Sparkles, BrainCircuit, LayoutGrid, Home, Menu, X, Minimize2, Maximize2, PanelRightClose, PanelRightOpen, Bell, ArrowRight, Download, CheckCircle2, Languages, LifeBuoy, Mail } from 'lucide-react';
 import ATSScoreChart from './components/ATSScoreChart';
-import { ensureDailyUsage, FREE_LIMITS, getEffectivePlan, hasFeatureAccess, PLAN_LABEL, PremiumFeature } from './services/planService';
-import { billingService } from './services/billingService';
+import { ensureDailyUsage } from './services/planService';
 import { backendDataService } from './services/backendDataService';
+import { authService } from './services/authService';
 
 const INITIAL_RESUME: ResumeData = {
   id: 'master',
@@ -130,11 +129,10 @@ const App: React.FC = () => {
     ],
     achievements: [],
     dataSources: [],
-    billing: { plan: 'free', status: 'active' },
     usageStats: ensureDailyUsage()
   });
 
-  const [view, setView] = useState<'home' | 'apps' | 'new-app' | 'application' | 'profile' | 'job-board' | 'help' | 'contact' | 'language' | 'settings' | 'subscription'>('home');
+  const [view, setView] = useState<'home' | 'apps' | 'new-app' | 'application' | 'profile' | 'job-board' | 'help' | 'contact' | 'language' | 'settings'>('home');
   const [activeAppId, setActiveAppId] = useState<string | null>(null);
   const [language, setLanguage] = useState<'English' | 'Spanish'>('English');
   
@@ -149,10 +147,7 @@ const App: React.FC = () => {
   const [isScoring, setIsScoring] = useState(false);
   const [isCheckingBias, setIsCheckingBias] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [pricingOpen, setPricingOpen] = useState(false);
-  const [pricingReason, setPricingReason] = useState<string>('');
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const [isBillingActionLoading, setIsBillingActionLoading] = useState(false);
 
   const migrateProfile = (storedProfile: any): UserProfile => ({
       ...profile,
@@ -171,7 +166,6 @@ const App: React.FC = () => {
       dailyGoals: storedProfile?.dailyGoals || profile.dailyGoals,
       achievements: storedProfile?.achievements || [],
       dataSources: storedProfile?.dataSources || [],
-      billing: storedProfile?.billing || { plan: 'free', status: 'active' },
       usageStats: ensureDailyUsage(storedProfile?.usageStats)
   });
 
@@ -231,23 +225,11 @@ const App: React.FC = () => {
 
   const activeApp = profile.applications.find(app => app.id === activeAppId);
   const activeResume = activeApp?.resumes.find(r => r.id === activeApp.activeResumeId);
-  const effectivePlan = getEffectivePlan(profile.billing);
-
   useEffect(() => {
       if (view === 'application' && !isGenerating && !generationError && (!activeAppId || !activeApp)) {
           setView('apps');
       }
   }, [view, isGenerating, generationError, activeAppId, activeApp]);
-
-  useEffect(() => {
-      if (!currentUser) return;
-      const run = async () => {
-          const billing = await billingService.syncSubscription(currentUser);
-          if (!billing) return;
-          setProfile(prev => ({ ...prev, billing: { ...prev.billing, ...billing } }));
-      };
-      run();
-  }, [currentUser]);
 
   const handleLandingStart = () => { setShowLanding(false); };
 
@@ -296,58 +278,16 @@ const App: React.FC = () => {
   const handleOnboardingComplete = () => { setShowTour(false); setProfile(prev => ({ ...prev, onboardingSeen: true })); };
 
   const handleLogout = () => {
+      authService.clearToken();
       setCurrentUser(null);
-      storageService.clearSession(); 
-      setProfile({ masterResume: INITIAL_RESUME, applications: [], privacyMode: false, preferences: profile.preferences, documents: [], onboardingSeen: false, profileComplete: false, achievements: [], dataSources: [], billing: { plan: 'free', status: 'active' }, usageStats: ensureDailyUsage() });
+      storageService.clearSession();
+      setProfile({ masterResume: INITIAL_RESUME, applications: [], privacyMode: false, preferences: profile.preferences, documents: [], onboardingSeen: false, profileComplete: false, achievements: [], dataSources: [], usageStats: ensureDailyUsage() });
       setView('home');
       setShowLanding(true);
   };
 
   const handleTogglePrivacy = (enabled: boolean) => { setProfile(prev => ({ ...prev, privacyMode: enabled })); };
   const prepareResumeForAI = (resume: ResumeData): ResumeData => profile.privacyMode ? anonymizeResume(resume) : resume;
-  const openPricing = (reason: string) => {
-      setPricingReason(reason);
-      setPricingOpen(true);
-  };
-
-  const handleStartCheckout = (tier: SubscriptionTier) => {
-      if (!currentUser) return;
-      billingService.openCheckout(currentUser, tier);
-  };
-
-  const handleRefreshSubscription = async () => {
-      if (!currentUser) return;
-      const billing = await billingService.syncSubscription(currentUser);
-      if (billing) {
-          setProfile(prev => ({ ...prev, billing: { ...prev.billing, ...billing } }));
-      }
-  };
-
-  const handleCancelSubscription = async (immediate = false) => {
-      if (!currentUser) return;
-      const confirmation = immediate
-          ? 'Cancel immediately? You will lose premium access now.'
-          : 'Cancel at period end? You keep premium access until renewal date.';
-      if (!window.confirm(confirmation)) return;
-      setIsBillingActionLoading(true);
-      try {
-          const billing = await billingService.cancelSubscription(currentUser, immediate);
-          if (billing) setProfile(prev => ({ ...prev, billing: { ...prev.billing, ...billing } }));
-      } finally {
-          setIsBillingActionLoading(false);
-      }
-  };
-
-  const handleReactivateSubscription = async () => {
-      if (!currentUser) return;
-      setIsBillingActionLoading(true);
-      try {
-          const billing = await billingService.reactivateSubscription(currentUser);
-          if (billing) setProfile(prev => ({ ...prev, billing: { ...prev.billing, ...billing } }));
-      } finally {
-          setIsBillingActionLoading(false);
-      }
-  };
 
   const consumeUsage = (key: 'aiActions' | 'resumesGenerated' | 'jobSearches', amount = 1) => {
       setProfile(prev => {
@@ -362,36 +302,11 @@ const App: React.FC = () => {
       });
   };
 
-  const hasQuota = (kind: 'aiActions' | 'resumesGenerated' | 'jobSearches') => {
-      if (effectivePlan !== 'free') return true;
-      const usage = ensureDailyUsage(profile.usageStats);
-      if (kind === 'aiActions') return usage.aiActions < FREE_LIMITS.aiActionsPerDay;
-      if (kind === 'resumesGenerated') return usage.resumesGenerated < FREE_LIMITS.resumesGeneratedPerDay;
-      return usage.jobSearches < FREE_LIMITS.jobSearchesPerDay;
-  };
-
-  const canUseFeature = (feature: PremiumFeature, reason: string) => {
-      if (!hasFeatureAccess(effectivePlan, feature)) {
-          openPricing(reason);
-          return false;
-      }
-      return true;
-  };
-
   const handleNewApplicationStart = () => {
-      if (effectivePlan === 'free' && profile.applications.length >= FREE_LIMITS.maxApplications) {
-          openPricing(`Free plan supports up to ${FREE_LIMITS.maxApplications} applications. Upgrade to unlock unlimited applications.`);
-          return;
-      }
       setView('new-app');
   };
 
   const handleJobAnalyzed = async (analysis: JobAnalysis, originalText: string) => {
-    if (!hasQuota('aiActions') || !hasQuota('resumesGenerated')) {
-      openPricing('Daily AI or resume-generation quota reached on Free. Upgrade for higher limits.');
-      return;
-    }
-
     const newApp: Application = {
         id: `app-${Date.now()}`,
         jobTitle: analysis.title,
@@ -469,10 +384,6 @@ const App: React.FC = () => {
   };
 
   const handlePersonalizeFromJobBoard = async (job: ExternalJob) => {
-      if (!hasQuota('jobSearches')) {
-          openPricing('Daily job personalization quota reached on Free. Upgrade for higher limits.');
-          return;
-      }
       const jobText = `Title: ${job.title}\nCompany: ${job.company}\nLocation: ${job.location}\nDescription: ${job.description}\nRequirements: ${job.requirements.join(', ')}`;
       try {
           setIsGenerating(true);
@@ -520,7 +431,6 @@ const App: React.FC = () => {
 
   const handleRunBiasCheck = async () => {
       if (!activeResume) return;
-      if (!canUseFeature('bias-audit', 'Bias audits are available on Pro plans.')) return;
       setIsCheckingBias(true);
       try {
           const result = await analyzeBias(activeResume);
@@ -534,10 +444,6 @@ const App: React.FC = () => {
 
   const handleApplyATSSuggestion = async (suggestion: string) => {
       if (!activeResume) return;
-      if (!hasQuota('aiActions')) {
-          openPricing('Daily AI quota reached on Free. Upgrade for unlimited optimization actions.');
-          return;
-      }
       setIsGenerating(true);
       try {
           const updated = await updateResumeWithAI(activeResume, `Implement this specific ATS improvement: ${suggestion}`);
@@ -583,16 +489,6 @@ const App: React.FC = () => {
   };
 
   const handleOpenTool = (tool: NonNullable<typeof activeTool>) => {
-      const premiumTools: Record<string, PremiumFeature> = {
-          interview: 'interview',
-          'deep-dive': 'interview',
-          'cover-letter': 'cover-letter',
-          networking: 'networking',
-          salary: 'salary',
-          linkedin: 'linkedin'
-      };
-      const required = premiumTools[tool];
-      if (required && !canUseFeature(required, `${tool.replace('-', ' ')} is available on Pro plans.`)) return;
       setActiveTool(tool);
   };
 
@@ -708,12 +604,8 @@ const App: React.FC = () => {
                             {profileMenuOpen && (
                                 <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50">
                                     <div className="px-4 py-2.5 border-b border-slate-100 text-[11px] text-slate-500">
-                                        Plan: {PLAN_LABEL[effectivePlan]} | Lvl {profile.level || 1}
+                                        AI actions today: {ensureDailyUsage(profile.usageStats).aiActions} | Lvl {profile.level || 1}
                                     </div>
-                                    <div className="px-4 py-2.5 border-b border-slate-100 text-[11px] text-slate-500">
-                                        AI usage today: {ensureDailyUsage(profile.usageStats).aiActions}/{FREE_LIMITS.aiActionsPerDay}
-                                    </div>
-                                    <button onClick={() => { setProfileMenuOpen(false); setView('subscription'); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Plans</button>
                                     <button onClick={() => { setProfileMenuOpen(false); setView('profile'); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Account</button>
                                     <button onClick={() => { setProfileMenuOpen(false); setView('settings'); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Settings</button>
                                     <button onClick={() => { setProfileMenuOpen(false); setView('help'); }} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">Help Center</button>
@@ -764,7 +656,7 @@ const App: React.FC = () => {
                     </div>
                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
                         <p className="font-semibold text-slate-900 mb-1">Need advanced support?</p>
-                        <p>Contact help@enhancv.com and include your account email plus a brief issue description.</p>
+                        <p>Contact support@hunj.ai and include your account email plus a brief issue description.</p>
                     </div>
                 </div>
             </UtilityPage>
@@ -772,17 +664,17 @@ const App: React.FC = () => {
         {view === 'contact' && (
             <UtilityPage
                 title="Contact Us"
-                subtitle="Reach our team for billing, product feedback, or technical support."
+                subtitle="Reach our team for product feedback, access help, or technical support."
                 icon={<Mail className="w-5 h-5" />}
             >
                 <div className="space-y-4 text-sm text-slate-700">
                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
                         <p className="font-semibold text-slate-900">Support</p>
-                        <p>help@enhancv.com</p>
+                        <p>support@hunj.ai</p>
                     </div>
                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
                         <p className="font-semibold text-slate-900">Business / Organization Accounts</p>
-                        <p>Contact help@enhancv.com to set up team onboarding and shared reporting.</p>
+                        <p>Contact support@hunj.ai to set up team onboarding and shared reporting.</p>
                     </div>
                 </div>
             </UtilityPage>
@@ -829,100 +721,11 @@ const App: React.FC = () => {
                             {profile.privacyMode ? 'On' : 'Off'}
                         </button>
                     </div>
-                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 flex items-center justify-between">
-                        <div>
-                            <p className="font-semibold text-slate-900">Current Plan</p>
-                            <p className="text-sm text-slate-600">{PLAN_LABEL[effectivePlan]} ({profile.billing.status})</p>
-                        </div>
-                        <button
-                            onClick={() => setView('subscription')}
-                            className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold"
-                        >
-                            Manage Plan
-                        </button>
-                    </div>
                     <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-                        <p className="font-semibold text-slate-900 mb-1">Daily AI Usage</p>
+                        <p className="font-semibold text-slate-900 mb-1">Activity Snapshot</p>
                         <p className="text-sm text-slate-600">
-                            {ensureDailyUsage(profile.usageStats).aiActions} / {FREE_LIMITS.aiActionsPerDay} actions used today.
+                            {ensureDailyUsage(profile.usageStats).aiActions} AI actions, {ensureDailyUsage(profile.usageStats).resumesGenerated} resumes generated, and {ensureDailyUsage(profile.usageStats).jobSearches} job searches today.
                         </p>
-                    </div>
-                </div>
-            </UtilityPage>
-        )}
-        {view === 'subscription' && (
-            <UtilityPage
-                title="Manage Subscription"
-                subtitle="Control your current plan, renewal, and cancellation options."
-                icon={<DollarSign className="w-5 h-5" />}
-            >
-                <div className="space-y-4">
-                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50">
-                        <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-white border border-slate-200 text-slate-700">
-                                Plan: {PLAN_LABEL[effectivePlan]}
-                            </span>
-                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-white border border-slate-200 text-slate-700">
-                                Status: {profile.billing.status}
-                            </span>
-                            {profile.billing.cancelAtPeriodEnd && (
-                                <span className="px-3 py-1 rounded-full text-xs font-bold bg-amber-50 border border-amber-200 text-amber-700">
-                                    Canceling at period end
-                                </span>
-                            )}
-                        </div>
-                        <div className="mt-3 text-sm text-slate-600">
-                            {profile.billing.renewsAt
-                                ? `Renews on ${new Date(profile.billing.renewsAt).toLocaleDateString()}.`
-                                : 'No renewal date available yet.'}
-                        </div>
-                    </div>
-
-                    <div className="p-4 rounded-xl border border-slate-200 bg-white flex flex-wrap gap-3">
-                        <button
-                            onClick={() => openPricing('Upgrade your plan for premium features and higher limits.')}
-                            className="px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold"
-                        >
-                            Change Plan
-                        </button>
-                        <button
-                            onClick={handleRefreshSubscription}
-                            disabled={isBillingActionLoading}
-                            className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 disabled:opacity-60"
-                        >
-                            Refresh Status
-                        </button>
-                        {effectivePlan !== 'free' && !profile.billing.cancelAtPeriodEnd && (
-                            <button
-                                onClick={() => handleCancelSubscription(false)}
-                                disabled={isBillingActionLoading}
-                                className="px-4 py-2 rounded-lg bg-amber-500 text-white font-semibold hover:bg-amber-600 disabled:opacity-60"
-                            >
-                                Cancel At Period End
-                            </button>
-                        )}
-                        {effectivePlan !== 'free' && profile.billing.cancelAtPeriodEnd && (
-                            <button
-                                onClick={handleReactivateSubscription}
-                                disabled={isBillingActionLoading}
-                                className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60"
-                            >
-                                Reactivate Subscription
-                            </button>
-                        )}
-                        {effectivePlan !== 'free' && (
-                            <button
-                                onClick={() => handleCancelSubscription(true)}
-                                disabled={isBillingActionLoading}
-                                className="px-4 py-2 rounded-lg bg-rose-600 text-white font-semibold hover:bg-rose-700 disabled:opacity-60"
-                            >
-                                Cancel Now
-                            </button>
-                        )}
-                    </div>
-
-                    <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600">
-                        Cancel at period end keeps premium access until your renewal date. Cancel now removes premium access immediately.
                     </div>
                 </div>
             </UtilityPage>
@@ -977,13 +780,13 @@ const App: React.FC = () => {
                             <div className="w-full h-px bg-slate-100 my-3"></div>
 
                             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest px-2 pb-1">AI Tools</div>
-                                <button onClick={() => handleOpenTool('interview')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'interview' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Mock Interview"><MessageSquare className="w-4 h-4" /> Interview Prep{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
-                                <button onClick={() => handleOpenTool('deep-dive')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'deep-dive' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Deep Dive Prober"><BrainCircuit className="w-4 h-4" /> Deep Dive Prober{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
-                                <button onClick={() => handleOpenTool('cover-letter')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'cover-letter' ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Cover Letter"><FileText className="w-4 h-4" /> Cover Letter{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
+                                <button onClick={() => handleOpenTool('interview')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'interview' ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Mock Interview"><MessageSquare className="w-4 h-4" /> Interview Prep</button>
+                                <button onClick={() => handleOpenTool('deep-dive')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'deep-dive' ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Deep Dive Prober"><BrainCircuit className="w-4 h-4" /> Deep Dive Prober</button>
+                                <button onClick={() => handleOpenTool('cover-letter')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'cover-letter' ? 'bg-pink-600 text-white shadow-lg shadow-pink-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Cover Letter"><FileText className="w-4 h-4" /> Cover Letter</button>
                                 <button onClick={() => handleOpenTool('autofill')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'autofill' ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Autofill Assistant"><FileText className="w-4 h-4" /> Autofill Assistant</button>
-                                <button onClick={() => handleOpenTool('networking')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'networking' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Networking"><Users className="w-4 h-4" /> Networking{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
-                            <button onClick={() => handleOpenTool('salary')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'salary' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Salary Intel"><DollarSign className="w-4 h-4" /> Salary Intel{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
-                            <button onClick={() => handleOpenTool('linkedin')} className={`relative w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'linkedin' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="LinkedIn"><Linkedin className="w-4 h-4" /> LinkedIn Optimizer{effectivePlan === 'free' && <Lock className="w-3 h-3 absolute top-2 right-2 text-amber-500" />}</button>
+                                <button onClick={() => handleOpenTool('networking')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'networking' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Networking"><Users className="w-4 h-4" /> Networking</button>
+                            <button onClick={() => handleOpenTool('salary')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'salary' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="Salary Intel"><DollarSign className="w-4 h-4" /> Salary Intel</button>
+                            <button onClick={() => handleOpenTool('linkedin')} className={`w-full p-3 rounded-xl transition-all duration-300 flex items-center justify-start gap-2 text-sm font-semibold ${activeTool === 'linkedin' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`} title="LinkedIn"><Linkedin className="w-4 h-4" /> LinkedIn Optimizer</button>
 
                             <div className="w-full h-px bg-slate-100 my-3"></div>
                             <button
@@ -1049,10 +852,6 @@ const App: React.FC = () => {
                                                 onUpdate={handleResumeUpdate}
                                                 onThemeUpdate={(t) => handleResumeUpdate({...activeResume, themeConfig: t})}
                                                 onApplySuggestion={async (instruction) => {
-                                                    if (!hasQuota('aiActions')) {
-                                                        openPricing('Daily AI quota reached on Free. Upgrade for unlimited refinement.');
-                                                        return;
-                                                    }
                                                     const updated = await updateResumeWithAI(activeResume, instruction);
                                                     handleResumeUpdate(updated);
                                                     consumeUsage('aiActions', 1);
@@ -1119,18 +918,6 @@ const App: React.FC = () => {
             <button onClick={() => setView('profile')} className={`flex flex-col items-center gap-1 w-full h-full justify-center transition-colors ${view === 'profile' ? 'text-blue-400' : 'text-slate-400'}`}><Users className="w-5 h-5" /><span className="text-[10px] font-medium">Profile</span></button>
         </div>
       )}
-      <PricingModal
-          isOpen={pricingOpen}
-          reason={pricingReason}
-          billing={profile.billing}
-          effectivePlan={effectivePlan}
-          isBillingActionLoading={isBillingActionLoading}
-          onClose={() => setPricingOpen(false)}
-          onCheckout={handleStartCheckout}
-          onRefreshSubscription={handleRefreshSubscription}
-          onCancelSubscription={handleCancelSubscription}
-          onReactivateSubscription={handleReactivateSubscription}
-      />
     </div>
   );
 };

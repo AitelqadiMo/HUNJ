@@ -26,7 +26,6 @@ type MegaMenu = 'resume' | 'cover-letter' | null;
 type LandingRoute =
   | 'home'
   | 'blog'
-  | 'pricing'
   | 'organizations'
   | 'resume-builder'
   | 'cover-letter-builder'
@@ -43,7 +42,7 @@ type LandingRoute =
   | 'terms-of-service'
   | 'privacy-policy';
 
-const FadeIn = ({ children, delay = 0 }: { children?: React.ReactNode; delay?: number }) => {
+const FadeIn = ({ children, delay = 0 }: { key?: React.Key; children?: React.ReactNode; delay?: number }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
 
@@ -184,14 +183,14 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
   const termsSections = useMemo(
     () => [
       {
-        title: 'Welcome to Enhancv',
+        title: 'Welcome to HUNJ',
         body:
-          'Thanks for using our platform and trusting us with your career goals. This website and platform ("Services") are provided by Enhancv R&D. ("us", "we", or "our"). By using Enhancv or accessing any of our Services, you are agreeing to these terms.'
+          'Thanks for using our platform and trusting us with your career goals. This website and platform ("Services") are provided by HUNJ R&D. ("us", "we", or "our"). By using HUNJ or accessing any of our Services, you are agreeing to these terms.'
       },
       {
         title: 'Accounts',
         body:
-          'When you create an account on Enhancv, you are responsible for maintaining its security and for all activities under your account. Use a strong password or third-party authentication. We are not liable for losses arising from failure to protect your credentials. Enhancv is designed for individual job seekers. Commercial use is prohibited unless a business account is arranged via help@enhancv.com.'
+          'When you create an account on HUNJ, you are responsible for maintaining its security and for all activities under your account. Use a strong password or third-party authentication. We are not liable for losses arising from failure to protect your credentials. HUNJ is designed for individual job seekers. Commercial use is prohibited unless a business account is arranged via support@hunj.ai.'
       },
       {
         title: 'Content',
@@ -201,27 +200,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
       {
         title: 'Responsible AI',
         body:
-          'Enhancv uses AI to suggest resume content, recommend improvements, and optimize wording based on job descriptions and market trends. AI suggestions support your process but do not replace your judgment. We indicate AI-generated suggestions, maintain privacy and data security standards, do not sell or share personal data with AI model providers, and continuously monitor bias. You remain responsible for reviewing and approving final output. AI does not guarantee employment outcomes.'
+          'HUNJ uses AI to suggest resume content, recommend improvements, and optimize wording based on job descriptions and market trends. AI suggestions support your process but do not replace your judgment. We indicate AI-generated suggestions, maintain privacy and data security standards, do not sell or share personal data with AI model providers, and continuously monitor bias. You remain responsible for reviewing and approving final output. AI does not guarantee employment outcomes.'
       },
       {
-        title: 'Subscription Fees',
+        title: 'Access Model',
         body:
-          'Enhancv may require payment for some Services. At the start of each billing period, you are charged for that period. Prices may change with at least thirty (30) days notice by email or website posting. Continued use after notice means acceptance of updated charges. Downgrading may reduce capabilities and Enhancv is not liable for this loss of access.'
+          'HUNJ currently provides its core product experience without requiring paid subscriptions. We may evolve packaging in the future, but any material change to access or pricing would be communicated before it takes effect.'
       },
       {
-        title: 'Cancellation',
+        title: 'Account Closure',
         body:
-          'You must cancel your subscription through the Billing page before your next billing date. After successful cancellation, an email confirmation is sent. We may not be able to process cancellation requests via email, and refunds are not guaranteed if cancellation was not completed in Billing unless a verified technical issue prevented cancellation.'
-      },
-      {
-        title: 'Refunds',
-        body:
-          'Monthly fees are non-refundable if services were used during that billing period. Quarterly and semi-annual fees may be eligible for partial pro-rated refunds.'
-      },
-      {
-        title: 'Trials & Discounts',
-        body:
-          'Trials and promo pricing must be used in the specified period and canceled before promotion end to avoid regular charges. Enhancv may limit users to one trial or one promo code and may prevent combining promotions. Promo-discounted fees are non-refundable. Invite credit cannot be exchanged for cash and may have usage deadlines.'
+          'You may stop using the service at any time and may request account deletion through the account or support channels. We may retain limited records when required for security, fraud prevention, or legal compliance.'
       },
       {
         title: 'Educational Institution Invitations',
@@ -231,11 +220,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
       {
         title: 'Termination',
         body:
-          'Enhancv may terminate accounts at its sole discretion at any time. Termination may deactivate or delete your account and content, and you may not be eligible for refunds. You may terminate your account through the Account page.'
+          'HUNJ may terminate accounts at its sole discretion at any time. Termination may deactivate or delete your account and content. You may terminate your account through the Account page.'
       },
       {
         title: 'Privacy',
-        body: 'Personal information and user content are governed by our Privacy Policy. By using Enhancv, you agree to that policy.'
+        body: 'Personal information and user content are governed by our Privacy Policy. By using HUNJ, you agree to that policy.'
       },
       {
         title: 'Limited Warranties and Liability',
@@ -245,7 +234,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
       {
         title: 'Governing Law',
         body:
-          'These Terms are governed by the laws of Bulgaria, without regard to conflict of law principles. If any provision is held invalid, the remainder remains in effect. These Terms constitute the entire agreement between you and Enhancv regarding the Services.'
+          'These Terms are governed by the laws of Bulgaria, without regard to conflict of law principles. If any provision is held invalid, the remainder remains in effect. These Terms constitute the entire agreement between you and HUNJ regarding the Services.'
       },
       {
         title: 'Changes',
@@ -260,22 +249,22 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     {
       title: 'Overview',
       body:
-        'Last updated: May 28, 2025. This Privacy Policy explains how Enhancv collects, uses, secures, and manages personal information when you use our website and services.'
+        'Last updated: May 28, 2025. This Privacy Policy explains how HUNJ collects, uses, secures, and manages personal information when you use our website and services.'
     },
     {
       title: 'Information We Collect',
       body:
-        'We collect account details (name, email, login credentials), profile/resume content, application activity, billing metadata, and technical usage information needed to operate and improve the service.'
+        'We collect account details (name, email, login credentials), profile/resume content, application activity, and technical usage information needed to operate and improve the service.'
     },
     {
       title: 'How We Use Information',
       body:
-        'We use data to provide resume and cover-letter tools, power AI suggestions, maintain account security, support subscriptions, improve product performance, and deliver customer support.'
+        'We use data to provide resume and cover-letter tools, power AI suggestions, maintain account security, improve product performance, and deliver customer support.'
     },
     {
       title: 'AI and Data Handling',
       body:
-        'AI tools are used to suggest improvements, optimize wording, and assist drafting. You retain final control of all submitted content. Enhancv does not sell or share personal data with AI model providers.'
+        'AI tools are used to suggest improvements, optimize wording, and assist drafting. You retain final control of all submitted content. HUNJ does not sell or share personal data with AI model providers.'
     },
     {
       title: 'Data Sharing',
@@ -295,11 +284,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     {
       title: 'Your Rights',
       body:
-        'Depending on your jurisdiction, you may have rights to access, correct, export, or delete personal information. Contact help@enhancv.com for privacy requests.'
+        'Depending on your jurisdiction, you may have rights to access, correct, export, or delete personal information. Contact support@hunj.ai for privacy requests.'
     },
     {
       title: 'Contact',
-      body: 'If you have questions about this Privacy Policy, contact help@enhancv.com.'
+      body: 'If you have questions about this Privacy Policy, contact support@hunj.ai.'
     }
   ];
 
@@ -307,7 +296,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
     <SectionPage
       eyebrow="Legal"
       title={title}
-      subtitle="Please review these policies carefully. If you have questions, contact help@enhancv.com."
+      subtitle="Please review these policies carefully. If you have questions, contact support@hunj.ai."
     >
       <div className="rounded-3xl border border-white/10 bg-devops-900/70 p-8 md:p-10 space-y-8">
         <div className="inline-flex items-center gap-2 text-xs text-devops-300 bg-devops-800/70 border border-white/10 rounded-full px-4 py-2">
@@ -469,7 +458,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
 
             <section className="py-20 text-center relative z-10">
               <div className="max-w-3xl mx-auto px-6 space-y-8">
-                <h2 className="text-4xl md:text-5xl font-display font-bold text-white">Ready to Upgrade Your Career?</h2>
+                <h2 className="text-4xl md:text-5xl font-display font-bold text-white">Ready to Accelerate Your Career?</h2>
                 <p className="text-lg text-devops-300">Join thousands of candidates using AI to land stronger roles faster.</p>
                 <button
                   onClick={onStart}
@@ -498,57 +487,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
                     Read article <ArrowRight className="w-4 h-4" />
                   </button>
                 </article>
-              ))}
-            </div>
-          </SectionPage>
-        );
-      case 'pricing':
-        return (
-          <SectionPage
-            eyebrow="Plans"
-            title="Pricing"
-            subtitle="Start free. Upgrade when you need deeper AI limits, advanced workflows, and premium optimization tools."
-          >
-            <div className="grid md:grid-cols-3 gap-6">
-              {[
-                {
-                  name: 'Free',
-                  price: '$0',
-                  detail: 'Great for trying the platform',
-                  features: ['Basic resume editor', '3 AI actions/day', 'Core templates'],
-                  cta: 'Get Started'
-                },
-                {
-                  name: 'Pro',
-                  price: '$19/mo',
-                  detail: 'Best for active job seekers',
-                  features: ['Unlimited AI optimization', 'Advanced job matching', 'Interview copilot'],
-                  cta: 'Upgrade to Pro'
-                },
-                {
-                  name: 'Team',
-                  price: '$79/mo',
-                  detail: 'For institutions and career teams',
-                  features: ['Multi-seat management', 'Analytics dashboard', 'Dedicated support'],
-                  cta: 'Contact Sales'
-                }
-              ].map((plan, idx) => (
-                <div key={plan.name} className={`${cardClass} ${idx === 1 ? 'border-hunj-400/50 shadow-[0_12px_40px_rgba(124,58,237,0.2)]' : ''}`}>
-                  <h2 className="text-white text-2xl font-bold">{plan.name}</h2>
-                  <p className="text-4xl font-bold text-hunj-300 mt-3">{plan.price}</p>
-                  <p className="text-devops-300 mt-2">{plan.detail}</p>
-                  <ul className="mt-6 space-y-3 text-devops-200">
-                    {plan.features.map((feature) => (
-                      <li key={feature} className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                  <button onClick={onStart} className="mt-7 w-full px-4 py-3 rounded-xl bg-hunj-600 hover:bg-hunj-500 text-white font-semibold transition-colors">
-                    {plan.cta}
-                  </button>
-                </div>
               ))}
             </div>
           </SectionPage>
@@ -587,7 +525,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
             </div>
             <div className={`${cardClass} bg-gradient-to-r from-hunj-900/50 to-devops-900/90`}>
               <h3 className="text-white text-2xl font-bold mb-2">Need a custom rollout?</h3>
-              <p className="text-devops-200 mb-6">Contact help@enhancv.com to configure team onboarding, access policies, and reporting.</p>
+              <p className="text-devops-200 mb-6">Contact support@hunj.ai to configure team onboarding, access policies, and reporting.</p>
               <button onClick={onStart} className="px-5 py-3 rounded-xl bg-white text-devops-950 font-semibold hover:bg-slate-100 transition-colors">
                 Request Demo
               </button>
@@ -793,7 +731,6 @@ const LandingPage: React.FC<LandingPageProps> = ({ onStart }) => {
               </button>
               <button onClick={() => goTo('blog')} className={headerLinkClass(route === 'blog')}>Blog</button>
               <button onClick={() => goTo('organizations')} className={headerLinkClass(route === 'organizations')}>For Organizations</button>
-              <button onClick={() => goTo('pricing')} className={headerLinkClass(route === 'pricing')}>Pricing</button>
             </div>
           </div>
 

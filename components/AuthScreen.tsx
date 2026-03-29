@@ -3,6 +3,7 @@ import { User, UserProfile, ResumeData } from '../types';
 import { storageService } from '../services/storageService';
 import { logger } from '../services/loggingService';
 import { ensureDailyUsage } from '../services/planService';
+import { authService } from '../services/authService';
 import { Target, ArrowRight, Loader2, Info, AlertTriangle, UserCircle, Copy, Check, Sparkles, Fingerprint } from 'lucide-react';
 
 declare global {
@@ -70,7 +71,6 @@ const INITIAL_PROFILE: UserProfile = {
     ],
     achievements: [],
     dataSources: [],
-    billing: { plan: 'free', status: 'active' },
     usageStats: ensureDailyUsage()
 };
 
@@ -155,8 +155,11 @@ const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin }) => {
   const handleGoogleCredentialResponse = (response: any) => {
       setLoading(true);
       const payload = parseJwt(response.credential);
-      
+
       if (payload) {
+          // Store the Google ID token so all API requests are authenticated
+          authService.setToken(response.credential);
+
           const googleUser: User = {
               id: `google-${payload.sub}`,
               email: payload.email,

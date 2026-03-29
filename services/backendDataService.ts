@@ -1,12 +1,14 @@
 import { User, UserProfile } from '../types';
+import { authService } from './authService';
 
 const API_BASE =
-  (import.meta as any)?.env?.VITE_BILLING_API_BASE ||
+  (import.meta as any)?.env?.VITE_AI_API_BASE ||
   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787');
 
 const safeFetchJson = async (url: string, options?: RequestInit): Promise<any | null> => {
   try {
-    const response = await fetch(url, options);
+    const headers = { ...authService.getAuthHeaders(), ...(options?.headers || {}) };
+    const response = await fetch(url, { ...options, headers });
     if (!response.ok) return null;
     return await response.json();
   } catch {

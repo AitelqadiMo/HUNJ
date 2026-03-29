@@ -6,8 +6,6 @@ substitutions:
   _PLATFORM: managed
   _SERVICE_NAME: hunj-hunt-your-job
   _VITE_GOOGLE_CLIENT_ID: ""
-  _VITE_GEMINI_API_KEY: ""
-  _VITE_ALL_FEATURES: "true"
   _VITE_AI_API_BASE: ""
 
 steps:
@@ -17,10 +15,6 @@ steps:
       - build
       - --build-arg
       - "VITE_GOOGLE_CLIENT_ID=${_VITE_GOOGLE_CLIENT_ID}"
-      - --build-arg
-      - "VITE_GEMINI_API_KEY=${_VITE_GEMINI_API_KEY}"
-      - --build-arg
-      - "VITE_ALL_FEATURES=${_VITE_ALL_FEATURES}"
       - --build-arg
       - "VITE_AI_API_BASE=${_VITE_AI_API_BASE}"
       - -t

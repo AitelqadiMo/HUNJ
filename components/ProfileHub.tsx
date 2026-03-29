@@ -193,15 +193,11 @@ const ProfileHub: React.FC<ProfileHubProps> = ({ profile, onUpdateProfile, onBac
                         ></div>
                     </div>
                 </div>
-                {safeProfile.billing?.plan === 'free' && (
-                    <div className="mt-3 bg-slate-800/60 rounded-2xl p-3 border border-slate-700">
-                        <div className="text-[10px] font-bold text-amber-300 uppercase tracking-widest mb-2">Free Plan Limits</div>
-                        <div className="text-[11px] text-slate-300 mb-2">AI actions today: {safeProfile.usageStats?.aiActions || 0}/20</div>
-                        <div className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-400" style={{ width: `${Math.min(100, ((safeProfile.usageStats?.aiActions || 0) / 20) * 100)}%` }}></div>
-                        </div>
-                    </div>
-                )}
+                <div className="mt-3 bg-slate-800/60 rounded-2xl p-3 border border-slate-700">
+                    <div className="text-[10px] font-bold text-emerald-300 uppercase tracking-widest mb-2">Free Access</div>
+                    <div className="text-[11px] text-slate-300 mb-2">All AI tools are currently enabled for every account.</div>
+                    <div className="text-[11px] text-slate-400">Activity today: {safeProfile.usageStats?.aiActions || 0} AI actions</div>
+                </div>
             </div>
         </aside>
 

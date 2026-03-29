@@ -57,7 +57,7 @@ const StatusMetric = ({ label, value, sub, trend, inverse = false }: { label: st
     </div>
 );
 
-const InsightCard = ({ title, desc, action, type }: { title: string, desc: string, action: string, type: 'opportunity' | 'risk' | 'success' }) => (
+const InsightCard = ({ title, desc, action, type }: { key?: React.Key, title: string, desc: string, action: string, type: 'opportunity' | 'risk' | 'success' }) => (
     <div className={`p-4 rounded-xl border-l-4 transition-all hover:scale-[1.02] cursor-pointer group ${
         type === 'opportunity' ? 'bg-blue-50 border-blue-500' : 
         type === 'risk' ? 'bg-red-50 border-red-500' : 

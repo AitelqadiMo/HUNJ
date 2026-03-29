@@ -1,43 +1,46 @@
 import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
-import Stripe from 'stripe';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { initFirestore } from './firestore.mjs';
+import aiRoutes from './aiRoutes.mjs';
+import { requireAuth } from './authMiddleware.mjs';
 
 dotenv.config();
 dotenv.config({ path: '.env.local', override: true });
 
 const app = express();
-const port = Number(process.env.PORT || process.env.BILLING_PORT || 8787);
-const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
+const port = Number(process.env.PORT || 8787);
 
-const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripeWebhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
-const stripePricePro = process.env.STRIPE_PRICE_PRO || '';
-const stripePriceTeam = process.env.STRIPE_PRICE_TEAM || '';
-const stripePaymentLink = process.env.STRIPE_PAYMENT_LINK || 'https://buy.stripe.com/test_cNi28ra0n5LQbSM44K8N200';
-
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
-const getStripe = () => {
-  if (!stripe) throw new Error('Missing STRIPE_SECRET_KEY');
-  return stripe;
-};
+// Accept a comma-separated list of origins, plus common dev ports by default
+const allowedOrigins = [
+  ...(process.env.FRONTEND_ORIGIN || '').split(',').map(s => s.trim()).filter(Boolean),
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://localhost:4173',
+];
 
 const EARLY_ACCESS_LIMIT = Number(process.env.EARLY_ACCESS_LIMIT || 20);
 const EARLY_ACCESS_DOC = 'meta/earlyAccess';
 const EARLY_ACCESS_CODE = 'early20';
 
-app.use(cors({ origin: frontendOrigin, credentials: true }));
-app.use((req, res, next) => {
-  if (req.path === '/api/billing/webhook') return next();
-  return express.json({ limit: '4mb' })(req, res, next);
-});
+app.use(cors({
+  origin: (origin, cb) => {
+    // Allow requests with no origin (server-to-server, curl) and known origins
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin ${origin} not allowed`));
+  },
+  credentials: true
+}));
+app.use(express.json({ limit: '4mb' }));
+
+// All API routes require a valid Firebase ID token.
+app.use('/api', requireAuth);
 
 app.get('/health', (_, res) => {
-  res.json({ ok: true, service: 'billing-api' });
+  res.json({ ok: true, service: 'hunj-api' });
 });
 
 const removeUndefinedDeep = (value) => {
@@ -67,96 +70,6 @@ const chunkedBatchWrite = async (db, operations) => {
   }
 };
 
-const mapStripeStatusToBillingStatus = (status) => {
-  if (status === 'active') return 'active';
-  if (status === 'trialing') return 'trialing';
-  if (status === 'past_due') return 'past_due';
-  return 'canceled';
-};
-
-const inferPlanFromPrice = (priceId, status) => {
-  if (priceId && stripePriceTeam && priceId === stripePriceTeam) return 'team';
-  if (priceId && stripePricePro && priceId === stripePricePro) return 'pro';
-  if (status === 'active' || status === 'trialing') return 'pro';
-  return 'free';
-};
-
-const mapSubscriptionToBilling = (sub, fallbackPlan = 'pro') => {
-  const status = mapStripeStatusToBillingStatus(sub?.status);
-  const priceId = sub?.items?.data?.[0]?.price?.id || '';
-  const plan = inferPlanFromPrice(priceId, status) || fallbackPlan;
-  return {
-    plan,
-    status,
-    customerId: sub?.customer || '',
-    subscriptionId: sub?.id || '',
-    cancelAtPeriodEnd: Boolean(sub?.cancel_at_period_end),
-    renewsAt: sub?.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : undefined,
-    canceledAt: sub?.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : undefined,
-    updatedAt: new Date().toISOString()
-  };
-};
-
-const getLatestSubscriptionForCustomer = async (customerId) => {
-  const stripe = getStripe();
-  if (!customerId) return null;
-  const subs = await stripe.subscriptions.list({
-    customer: customerId,
-    status: 'all',
-    limit: 20
-  });
-  if (!subs.data.length) return null;
-  const rankedStatuses = ['active', 'trialing', 'past_due', 'unpaid', 'canceled', 'incomplete', 'incomplete_expired'];
-  const sorted = [...subs.data].sort((a, b) => {
-    const aRank = rankedStatuses.indexOf(a.status);
-    const bRank = rankedStatuses.indexOf(b.status);
-    if (aRank !== bRank) return aRank - bRank;
-    return (b.created || 0) - (a.created || 0);
-  });
-  return sorted[0] || null;
-};
-
-const resolveCustomerEmail = async (customerId) => {
-  const stripe = getStripe();
-  if (!customerId) return '';
-  try {
-    const customer = await stripe.customers.retrieve(customerId);
-    if (customer && !customer.deleted) {
-      return customer.email || '';
-    }
-  } catch (e) {
-    console.error('Failed to resolve customer email', e);
-  }
-  return '';
-};
-
-const ensureUserDoc = async (db, { userId, email, name }) => {
-  const ref = db.collection('users').doc(userId);
-  const snap = await ref.get();
-  const isNew = !snap.exists;
-  if (!snap.exists) {
-    await ref.set(
-      {
-        userId,
-        email,
-        name: name || '',
-        billing: { plan: 'free', status: 'active' },
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      },
-      { merge: true }
-    );
-  } else {
-    await ref.set({ email, name: name || '', updatedAt: new Date().toISOString() }, { merge: true });
-  }
-
-  if (isNew) {
-    await assignEarlyAccess(db, ref);
-  }
-
-  return ref;
-};
-
 const assignEarlyAccess = async (db, userRef) => {
   if (!EARLY_ACCESS_LIMIT || EARLY_ACCESS_LIMIT <= 0) return false;
   const metaRef = db.doc(EARLY_ACCESS_DOC);
@@ -184,6 +97,33 @@ const assignEarlyAccess = async (db, userRef) => {
     console.error('Early access assignment failed', error);
   }
   return granted;
+};
+
+const ensureUserDoc = async (db, { userId, email, name }) => {
+  const ref = db.collection('users').doc(userId);
+  const snap = await ref.get();
+  const isNew = !snap.exists;
+
+  if (!snap.exists) {
+    await ref.set(
+      {
+        userId,
+        email,
+        name: name || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      },
+      { merge: true }
+    );
+  } else {
+    await ref.set({ email, name: name || '', updatedAt: new Date().toISOString() }, { merge: true });
+  }
+
+  if (isNew) {
+    await assignEarlyAccess(db, ref);
+  }
+
+  return ref;
 };
 
 app.post('/api/users/upsert', async (req, res) => {
@@ -438,533 +378,8 @@ app.get('/api/documents', async (req, res) => {
   }
 });
 
-app.post('/api/billing/checkout', express.json(), async (req, res) => {
-  try {
-    const stripe = getStripe();
-    const db = initFirestore();
-    const { userId, email, name, tier, successUrl, cancelUrl } = req.body || {};
-
-    if (!userId || !email) {
-      return res.status(400).json({ error: 'userId and email are required' });
-    }
-
-    const userRef = await ensureUserDoc(db, { userId, email, name });
-    const userSnap = await userRef.get();
-    const user = userSnap.data() || {};
-
-    let customerId = user?.billing?.customerId || '';
-    if (!customerId) {
-      const customer = await stripe.customers.create({
-        email,
-        name: name || undefined,
-        metadata: { userId }
-      });
-      customerId = customer.id;
-    }
-
-    let sessionUrl = '';
-    if ((tier === 'pro' && stripePricePro) || (tier === 'team' && stripePriceTeam)) {
-      const price = tier === 'team' ? stripePriceTeam : stripePricePro;
-      const session = await stripe.checkout.sessions.create({
-        mode: 'subscription',
-        customer: customerId,
-        line_items: [{ price, quantity: 1 }],
-        success_url: successUrl || frontendOrigin,
-        cancel_url: cancelUrl || frontendOrigin,
-        allow_promotion_codes: true,
-        metadata: { userId, tier }
-      });
-      sessionUrl = session.url || '';
-    } else {
-      sessionUrl = `${stripePaymentLink}?prefilled_email=${encodeURIComponent(email)}`;
-    }
-
-    await userRef.set(
-      {
-        billing: {
-          ...(user.billing || {}),
-          customerId,
-          checkoutTier: tier || 'pro',
-          updatedAt: new Date().toISOString()
-        }
-      },
-      { merge: true }
-    );
-
-    return res.json({ url: sessionUrl });
-  } catch (error) {
-    console.error('checkout error', error);
-    return res.status(500).json({ error: 'Failed to start checkout' });
-  }
-});
-
-app.get('/api/billing/status', async (req, res) => {
-  try {
-    const db = initFirestore();
-    const userId = String(req.query.userId || '');
-    const email = String(req.query.email || '');
-
-    if (!userId || !email) {
-      return res.status(400).json({ error: 'userId and email are required' });
-    }
-
-    const userRef = await ensureUserDoc(db, { userId, email, name: '' });
-    const snap = await userRef.get();
-    const user = snap.data() || {};
-    const billing = user.billing || { plan: 'free', status: 'active' };
-    const promoFreeAll = Boolean(user?.promo?.freeAll);
-    const effectivePlan = promoFreeAll ? 'pro' : (billing.plan || 'free');
-    const effectiveStatus = promoFreeAll ? 'active' : (billing.status || 'active');
-
-    return res.json({
-      userId,
-      email,
-      plan: effectivePlan,
-      status: effectiveStatus,
-      renewsAt: billing.renewsAt || undefined,
-      customerId: billing.customerId || undefined,
-      subscriptionId: billing.subscriptionId || undefined,
-      cancelAtPeriodEnd: Boolean(billing.cancelAtPeriodEnd),
-      canceledAt: billing.canceledAt || undefined
-    });
-  } catch (error) {
-    console.error('status error', error);
-    return res.status(500).json({ error: 'Failed to fetch billing status' });
-  }
-});
-
-app.post('/api/ai/analyze-job', async (req, res) => {
-  try {
-    const { text } = req.body || {};
-    if (!text || typeof text !== 'string') return res.status(400).json({ error: 'text is required' });
-    const ai = getGemini();
-    const schema = {
-      type: Type.OBJECT,
-      properties: {
-        title: { type: Type.STRING },
-        company: { type: Type.STRING },
-        requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-        optionalSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-        industry: { type: Type.STRING },
-        seniorityLevel: { type: Type.STRING },
-        leadershipRequired: { type: Type.BOOLEAN },
-        keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
-        summary: { type: Type.STRING },
-        experienceLevel: { type: Type.STRING },
-        hiringProbability: { type: Type.NUMBER },
-        hiringReasoning: { type: Type.STRING },
-        companyInsights: { type: Type.STRING },
-        hiddenRequirements: { type: Type.ARRAY, items: { type: Type.STRING } },
-        cultureIndicators: { type: Type.ARRAY, items: { type: Type.STRING } },
-        softSkills: { type: Type.ARRAY, items: { type: Type.STRING } },
-        tools: { type: Type.ARRAY, items: { type: Type.STRING } },
-        certifications: { type: Type.ARRAY, items: { type: Type.STRING } }
-      }
-    };
-    const response = await runWithTimeout(
-      ai.models.generateContent({
-        model: 'gemini-2.5-flash-lite',
-        contents: `Extract structured job requirements from the text. Keep output concise and factual.\n${text.substring(0, 12000)}`,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema
-        }
-      })
-    );
-    const parsed = JSON.parse(response?.text || '{}');
-    return res.json(parsed);
-  } catch (error) {
-    console.error('analyze job error', error);
-    return res.status(500).json({ error: 'Failed to analyze job' });
-  }
-});
-
-app.post('/api/ai/tailor-resume', async (req, res) => {
-  try {
-    const { resume, job, missingSkills } = req.body || {};
-    if (!resume || !job) return res.status(400).json({ error: 'resume and job are required' });
-    const ai = getGemini();
-    const schema = {
-      type: Type.OBJECT,
-      properties: {
-        summary: { type: Type.STRING },
-        experience: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              role: { type: Type.STRING },
-              company: { type: Type.STRING },
-              period: { type: Type.STRING },
-              bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
-            }
-          }
-        },
-        reorderedSkills: { type: Type.ARRAY, items: { type: Type.STRING } }
-      }
-    };
-
-    const prompt = `You are an elite resume writer. Tailor the resume for this role.
-Job title: ${job.title || ''}
-Company: ${job.company || ''}
-Required skills: ${(job.requiredSkills || []).join(', ')}
-Optional skills: ${(job.optionalSkills || []).join(', ')}
-Keywords: ${(job.keywords || []).join(', ')}
-Priority missing skills: ${(missingSkills || []).slice(0, 8).join(', ') || 'none'}
-Rules:
-- Keep all facts truthful; do not invent employers, dates, or degrees.
-- Rewrite summary and bullets to emphasize relevant impact.
-- Add quantified impact only if implied by existing bullets.
-- Keep bullets concise (1 line each).
-Resume JSON: ${JSON.stringify(sanitizeResumeInput(resume)).slice(0, 12000)}`;
-
-    const response = await runWithTimeout(
-      ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          thinkingConfig: { thinkingBudget: 4096 }
-        }
-      })
-    );
-    const parsed = JSON.parse(response?.text || '{}');
-    return res.json(parsed);
-  } catch (error) {
-    console.error('tailor resume error', error);
-    return res.status(500).json({ error: 'Failed to tailor resume' });
-  }
-});
-
-app.post('/api/ai/update-resume', async (req, res) => {
-  try {
-    const { resume, instruction } = req.body || {};
-    if (!resume || !instruction) return res.status(400).json({ error: 'resume and instruction are required' });
-    const ai = getGemini();
-    const schema = {
-      type: Type.OBJECT,
-      properties: {
-        summary: { type: Type.STRING },
-        experience: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              role: { type: Type.STRING },
-              company: { type: Type.STRING },
-              period: { type: Type.STRING },
-              bullets: { type: Type.ARRAY, items: { type: Type.STRING } }
-            }
-          }
-        },
-        skills: { type: Type.ARRAY, items: { type: Type.STRING } }
-      }
-    };
-    const prompt = `Apply this instruction to the resume while preserving facts and structure.
-Instruction: ${instruction}
-Resume JSON: ${JSON.stringify(sanitizeResumeInput(resume)).slice(0, 12000)}`;
-    const response = await runWithTimeout(
-      ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: schema,
-          thinkingConfig: { thinkingBudget: 2048 }
-        }
-      })
-    );
-    const parsed = JSON.parse(response?.text || '{}');
-    return res.json(parsed);
-  } catch (error) {
-    console.error('update resume error', error);
-    return res.status(500).json({ error: 'Failed to update resume' });
-  }
-});
-
-app.post('/api/ai/job-search', async (req, res) => {
-  try {
-    const { filters } = req.body || {};
-    if (!filters) return res.status(400).json({ error: 'filters are required' });
-    const ai = getGemini();
-    const response = await runWithTimeout(
-      ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: `Find recent job opportunities from public web data and return only verifiable listings.
-Query: ${filters.query}
-Location: ${filters.location}
-Remote: ${filters.remote}
-Date Posted: ${filters.datePosted}
-Level: ${filters.level}
-Type: ${filters.type}
-Company filter: ${filters.company || 'Any'}
-Visa sponsorship: ${filters.visa || 'Any'}
-Easy Apply: ${filters.easyApply || 'Any'}
-Minimum salary: ${filters.minSalary || 0}
-Minimum match score: ${filters.minMatch || 0}
-Return JSON array with:
-id,title,company,location,description,requirements,postedDate,salaryRange,visaSupport,easyApply,employmentType,matchScore,tags`,
-        config: {
-          responseMimeType: 'application/json',
-          tools: [{ googleSearch: {} }],
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                title: { type: Type.STRING },
-                company: { type: Type.STRING },
-                location: { type: Type.STRING },
-                description: { type: Type.STRING },
-                requirements: { type: Type.ARRAY, items: { type: Type.STRING } },
-                postedDate: { type: Type.STRING },
-                salaryRange: { type: Type.STRING },
-                visaSupport: { type: Type.BOOLEAN },
-                easyApply: { type: Type.BOOLEAN },
-                employmentType: { type: Type.STRING },
-                matchScore: { type: Type.NUMBER },
-                tags: { type: Type.ARRAY, items: { type: Type.STRING } }
-              }
-            }
-          },
-          thinkingConfig: { thinkingBudget: 1024 }
-        }
-      })
-    );
-    const parsed = JSON.parse(response?.text || '[]');
-    return res.json(Array.isArray(parsed) ? parsed : []);
-  } catch (error) {
-    console.error('job search error', error);
-    return res.status(500).json({ error: 'Failed to search jobs' });
-  }
-});
-
-app.post('/api/billing/cancel', async (req, res) => {
-  try {
-    const stripe = getStripe();
-    const db = initFirestore();
-    const { userId, email, immediate } = req.body || {};
-    if (!userId || !email) {
-      return res.status(400).json({ error: 'userId and email are required' });
-    }
-
-    const userRef = await ensureUserDoc(db, { userId, email, name: '' });
-    const userSnap = await userRef.get();
-    const user = userSnap.data() || {};
-    const customerId = user?.billing?.customerId || '';
-    if (!customerId) {
-      return res.status(404).json({ error: 'No active Stripe customer found for this account' });
-    }
-
-    const sub = await getLatestSubscriptionForCustomer(customerId);
-    if (!sub) {
-      await userRef.set(
-        { billing: { ...(user.billing || {}), plan: 'free', status: 'canceled', updatedAt: new Date().toISOString() } },
-        { merge: true }
-      );
-      return res.json({ ok: true, billing: { ...(user.billing || {}), plan: 'free', status: 'canceled' } });
-    }
-
-    let updatedSub;
-    if (immediate) {
-      updatedSub = await stripe.subscriptions.cancel(sub.id);
-    } else {
-      updatedSub = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });
-    }
-
-    const nextBilling = mapSubscriptionToBilling(updatedSub, user?.billing?.plan || 'pro');
-    await userRef.set({ billing: nextBilling }, { merge: true });
-    return res.json({ ok: true, billing: nextBilling });
-  } catch (error) {
-    console.error('cancel subscription error', error);
-    return res.status(500).json({ error: 'Failed to cancel subscription' });
-  }
-});
-
-app.post('/api/billing/reactivate', async (req, res) => {
-  try {
-    const stripe = getStripe();
-    const db = initFirestore();
-    const { userId, email } = req.body || {};
-    if (!userId || !email) {
-      return res.status(400).json({ error: 'userId and email are required' });
-    }
-
-    const userRef = await ensureUserDoc(db, { userId, email, name: '' });
-    const userSnap = await userRef.get();
-    const user = userSnap.data() || {};
-    const customerId = user?.billing?.customerId || '';
-    if (!customerId) {
-      return res.status(404).json({ error: 'No active Stripe customer found for this account' });
-    }
-
-    const sub = await getLatestSubscriptionForCustomer(customerId);
-    if (!sub) {
-      return res.status(404).json({ error: 'No subscription found for this account' });
-    }
-
-    if (sub.status === 'canceled') {
-      return res.status(400).json({ error: 'Subscription is fully canceled. Start a new checkout to subscribe again.' });
-    }
-
-    const updatedSub = await stripe.subscriptions.update(sub.id, { cancel_at_period_end: false });
-    const nextBilling = mapSubscriptionToBilling(updatedSub, user?.billing?.plan || 'pro');
-    await userRef.set({ billing: nextBilling }, { merge: true });
-    return res.json({ ok: true, billing: nextBilling });
-  } catch (error) {
-    console.error('reactivate subscription error', error);
-    return res.status(500).json({ error: 'Failed to reactivate subscription' });
-  }
-});
-
-app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  let event;
-  try {
-    const stripe = getStripe();
-    const signature = req.headers['stripe-signature'];
-    if (!stripeWebhookSecret || !signature) {
-      return res.status(400).send('Webhook secret/signature missing');
-    }
-    event = stripe.webhooks.constructEvent(req.body, signature, stripeWebhookSecret);
-  } catch (err) {
-    console.error('Webhook verify failed', err);
-    return res.status(400).send('Invalid signature');
-  }
-
-  try {
-    const db = initFirestore();
-    const subscriptions = db.collection('subscriptions');
-    const users = db.collection('users');
-
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const userId = session?.metadata?.userId || '';
-      const customerId = session.customer || '';
-      const subscriptionId = session.subscription || '';
-      const email = session?.customer_details?.email || '';
-      const checkoutTier = session?.metadata?.tier || 'pro';
-
-      if (userId) {
-        await users.doc(userId).set(
-          {
-            email,
-            billing: {
-              plan: checkoutTier,
-              status: 'active',
-              customerId,
-              subscriptionId,
-              cancelAtPeriodEnd: false,
-              updatedAt: new Date().toISOString()
-            }
-          },
-          { merge: true }
-        );
-      } else if (email) {
-        const snap = await users.where('email', '==', email).limit(1).get();
-        if (!snap.empty) {
-          const doc = snap.docs[0];
-          await doc.ref.set(
-            {
-              billing: {
-                plan: checkoutTier,
-                status: 'active',
-                customerId,
-                subscriptionId,
-                cancelAtPeriodEnd: false,
-                updatedAt: new Date().toISOString()
-              }
-            },
-            { merge: true }
-          );
-        }
-      }
-
-      await subscriptions.doc(session.id).set(
-        {
-          id: session.id,
-          eventType: event.type,
-          customerId,
-          subscriptionId,
-          email,
-          userId,
-          plan: checkoutTier,
-          createdAt: new Date().toISOString()
-        },
-        { merge: true }
-      );
-    }
-
-    if (
-      event.type === 'customer.subscription.created' ||
-      event.type === 'customer.subscription.updated' ||
-      event.type === 'customer.subscription.deleted'
-    ) {
-      const sub = event.data.object;
-      const customerId = sub.customer || '';
-      const status = mapStripeStatusToBillingStatus(sub.status);
-      const priceId = sub?.items?.data?.[0]?.price?.id || '';
-      const plan = inferPlanFromPrice(priceId, status);
-      const email = await resolveCustomerEmail(customerId);
-      const cancelAtPeriodEnd = Boolean(sub?.cancel_at_period_end);
-      const canceledAt = sub?.canceled_at ? new Date(sub.canceled_at * 1000).toISOString() : undefined;
-
-      let userDocRef = null;
-      const byCustomerSnap = await users.where('billing.customerId', '==', customerId).limit(1).get();
-      if (!byCustomerSnap.empty) {
-        userDocRef = byCustomerSnap.docs[0].ref;
-      } else if (email) {
-        const byEmailSnap = await users.where('email', '==', email).limit(1).get();
-        if (!byEmailSnap.empty) {
-          userDocRef = byEmailSnap.docs[0].ref;
-        }
-      }
-
-      if (userDocRef) {
-        const current = (await userDocRef.get()).data() || {};
-        await userDocRef.set(
-          {
-            email: email || current.email || '',
-            billing: {
-              ...(current.billing || {}),
-              plan,
-              status,
-              customerId: customerId || current?.billing?.customerId,
-              subscriptionId: sub?.id || current?.billing?.subscriptionId,
-              cancelAtPeriodEnd,
-              renewsAt: sub?.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : undefined,
-              canceledAt,
-              updatedAt: new Date().toISOString()
-            }
-          },
-          { merge: true }
-        );
-      }
-
-      await subscriptions.doc(sub.id).set(
-        {
-          id: sub.id,
-          eventType: event.type,
-          customerId,
-          email,
-          plan,
-          status,
-          cancelAtPeriodEnd,
-          canceledAt: canceledAt || null,
-          currentPeriodEnd: sub?.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
-          updatedAt: new Date().toISOString()
-        },
-        { merge: true }
-      );
-    }
-
-    return res.json({ received: true });
-  } catch (error) {
-    console.error('Webhook processing failed', error);
-    return res.status(500).json({ error: 'Webhook processing failed' });
-  }
-});
+// AI routes are served via the modular aiRoutes.mjs
+app.use('/api/ai', aiRoutes);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -979,5 +394,5 @@ if (fs.existsSync(distPath)) {
 }
 
 app.listen(port, () => {
-  console.log(`Billing server running on port ${port}`);
+  console.log(`HUNJ server running on port ${port}`);
 });

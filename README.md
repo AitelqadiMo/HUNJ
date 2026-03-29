@@ -188,9 +188,9 @@ HUNJ is designed with a **Local-First** architecture.
 
 ---
 
-## 💳 Stripe + Firestore Subscription Backend
+## ☁️ Firestore + API Backend
 
-HUNJ now supports backend subscription state sync.
+HUNJ uses a lightweight backend for authenticated profile persistence and AI routes.
 
 ### Backend setup
 1. Install dependencies:
@@ -202,24 +202,17 @@ npm install
 ```env
 FIREBASE_SERVICE_ACCOUNT_PATH=./firebase-service-account.json
 ```
-4. Run billing API:
+4. Run the API server:
 ```bash
 npm run server
 ```
 
-### Stripe webhook
-Use Stripe CLI to forward events:
-```bash
-stripe listen --forward-to localhost:8787/api/billing/webhook
-```
-
 ### Firestore collections
 The backend writes:
-- `users/{userId}` with `billing.plan`, `billing.status`, `billing.customerId`, `billing.renewsAt`
-- `subscriptions/{checkoutSessionId}` audit trail
-
-Frontend syncs subscription state from:
-- `GET /api/billing/status?userId=...&email=...`
+- `users/{userId}` for account metadata
+- `profiles/{userId}` for profile state
+- `applications/{applicationId}` for saved applications
+- `documents/{documentId}` for uploaded/generated documents
 
 ---
 
